@@ -871,6 +871,31 @@
     });
   }
 
+  // ------------------------------------------------------------ tema claro / oscuro
+
+  var THEMES = [
+    { id: 'auto', icon: '🌓', label: 'Auto' },
+    { id: 'dark', icon: '🌙', label: 'Oscuro' },
+    { id: 'light', icon: '☀️', label: 'Claro' }
+  ];
+
+  function applyTheme(id) {
+    var theme = THEMES.filter(function (t) { return t.id === id; })[0] || THEMES[0];
+    if (theme.id === 'auto') delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = theme.id;
+    $('theme').querySelector('.icon').textContent = theme.icon;
+    $('theme').querySelector('.label').textContent = theme.label;
+    $('theme').setAttribute('aria-label', 'Tema: ' + theme.label + ' (toca para cambiar)');
+    return theme.id;
+  }
+
+  function nextTheme() {
+    var current = recall('theme') || 'auto';
+    var i = THEMES.map(function (t) { return t.id; }).indexOf(current);
+    var id = applyTheme(THEMES[(i + 1) % THEMES.length].id);
+    store('theme', id);
+  }
+
   // ------------------------------------------------------------ actualizaciones de la app
 
   function showUpdate(text, button, action) {
@@ -942,6 +967,8 @@
     auto.addEventListener('change', function () { store('autolisten', auto.checked); });
 
     $('refresh').addEventListener('click', refreshNow);
+    applyTheme(recall('theme') || 'auto');
+    $('theme').addEventListener('click', nextTheme);
 
     if (Plugins.Assistant) {
       // texto en vivo mientras hablas y el micrófono "late" con tu voz
