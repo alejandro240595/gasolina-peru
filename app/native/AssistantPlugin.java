@@ -1,6 +1,9 @@
 package pe.gasolina.voz;
 
 import android.Manifest;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothManager;
 import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.ContentResolver;
@@ -12,6 +15,8 @@ import android.database.Cursor;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
+import android.media.AudioManager;
+import android.media.ToneGenerator;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -35,7 +40,9 @@ import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Funciones locales del asistente (sin internet):
@@ -43,14 +50,17 @@ import java.util.List;
  *  - getContacts(): nombres y números de la agenda
  *  - call(): llamada directa
  *  - torch(), setAlarm(), setTimer(): linterna, alarma y temporizador
- *  - evento "assist": la app se abrió como asistente del sistema (tecla lateral, audífono)
+ *  - evento "assist": la app se abrió como asistente del sistema (tecla lateral, audífono, "Hola Oso")
+ *  - wake*(): configurar "Hola Oso" (al cargar / en el auto)
  */
 @CapacitorPlugin(
     name = "Assistant",
     permissions = {
         @Permission(alias = "microphone", strings = { Manifest.permission.RECORD_AUDIO }),
         @Permission(alias = "contacts", strings = { Manifest.permission.READ_CONTACTS }),
-        @Permission(alias = "phone", strings = { Manifest.permission.CALL_PHONE })
+        @Permission(alias = "phone", strings = { Manifest.permission.CALL_PHONE }),
+        @Permission(alias = "notifications", strings = { "android.permission.POST_NOTIFICATIONS" }),
+        @Permission(alias = "bluetooth", strings = { "android.permission.BLUETOOTH_CONNECT" })
     }
 )
 public class AssistantPlugin extends Plugin {
@@ -132,6 +142,7 @@ public class AssistantPlugin extends Plugin {
         final boolean wantOnDevice = Boolean.TRUE.equals(call.getBoolean("onDevice", true));
 
         getActivity().runOnUiThread(() -> {
+            WakeService.pauseForApp();
             destroyRecognizer();
             if (listenCall != null) {
                 listenCall.reject("Interrumpido", "cancelled");
@@ -155,6 +166,7 @@ public class AssistantPlugin extends Plugin {
 
             recognizer.setRecognitionListener(new RecognitionListener() {
                 @Override public void onReadyForSpeech(Bundle params) {
+                    if (WakeService.isRunning()) beep();   // manos libres: avisar que ya puede hablar
                     notifyListeners("state", new JSObject().put("state", "ready"));
                 }
                 @Override public void onBeginningOfSpeech() {
@@ -171,6 +183,7 @@ public class AssistantPlugin extends Plugin {
                     PluginCall c = listenCall;
                     listenCall = null;
                     destroyRecognizer();
+                    WakeService.resumeLater(3000);
                     if (c != null) c.reject(errorMessage(error), String.valueOf(error));
                 }
                 @Override public void onResults(Bundle results) {
@@ -180,6 +193,7 @@ public class AssistantPlugin extends Plugin {
                     ArrayList<String> list = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
                     if (list != null) for (String s : list) matches.put(s);
                     destroyRecognizer();
+                    WakeService.resumeLater(6000);   // tiempo para responder en voz alta / iniciar la llamada
                     if (c != null) {
                         c.resolve(new JSObject().put("matches", matches).put("onDevice", usedOnDevice));
                     }
@@ -219,6 +233,7 @@ public class AssistantPlugin extends Plugin {
             listenCall = null;
             destroyRecognizer();
             if (c != null) c.reject("Cancelado", "cancelled");
+            WakeService.resumeLater(3000);
             call.resolve();
         });
     }
@@ -319,6 +334,142 @@ public class AssistantPlugin extends Plugin {
             case ContactsContract.CommonDataKinds.Phone.TYPE_WORK:
             case ContactsContract.CommonDataKinds.Phone.TYPE_WORK_MOBILE: return "work";
             default: return "other";
+        }
+    }
+
+    private void beep() {
+        try {
+            final ToneGenerator tone = new ToneGenerator(AudioManager.STREAM_MUSIC, 80);
+            tone.startTone(ToneGenerator.TONE_PROP_BEEP, 150);
+            new Handler(Looper.getMainLooper()).postDelayed(tone::release, 300);
+        } catch (Exception ignored) { }
+    }
+
+    // ------------------------------------------------------------------ "Hola Oso"
+
+    private JSObject wakeState() {
+        JSArray devices = new JSArray();
+        for (String d : WakeService.carDevices(getContext())) devices.put(d);
+        return new JSObject()
+            .put("running", WakeService.isRunning())
+            .put("reason", WakeService.reason)
+            .put("charging", WakeService.prefs(getContext()).getBoolean("charging", false))
+            .put("car", WakeService.prefs(getContext()).getBoolean("car", false))
+            .put("devices", devices)
+            .put("assistant", AssistService.instance != null);
+    }
+
+    @PluginMethod
+    public void wakeStatus(PluginCall call) {
+        call.resolve(wakeState());
+    }
+
+    /** {charging, car, devices:[direcciones]} — guarda y aplica de inmediato. */
+    @PluginMethod
+    public void wakeConfigure(PluginCall call) {
+        if (Build.VERSION.SDK_INT >= 33 && getPermissionState("notifications") != PermissionState.GRANTED) {
+            requestPermissionForAlias("notifications", call, "wakeConfigureCallback");
+            return;
+        }
+        applyWakeConfig(call);
+    }
+
+    @PermissionCallback
+    private void wakeConfigureCallback(PluginCall call) {
+        applyWakeConfig(call);   // sin notificaciones también funciona; solo no se ve el aviso
+    }
+
+    private void applyWakeConfig(PluginCall call) {
+        boolean charging = Boolean.TRUE.equals(call.getBoolean("charging", false));
+        boolean car = Boolean.TRUE.equals(call.getBoolean("car", false));
+        Set<String> devices = new HashSet<>();
+        JSArray list = call.getArray("devices", new JSArray());
+        for (int i = 0; i < list.length(); i++) {
+            String d = list.optString(i, null);
+            if (d != null) devices.add(d);
+        }
+        WakeService.prefs(getContext()).edit()
+            .putBoolean("charging", charging)
+            .putBoolean("car", car)
+            .putStringSet("devices", devices)
+            .apply();
+
+        String reason = WakeService.reason;
+        if (WakeService.isRunning() && (("charging".equals(reason) && !charging) || ("car".equals(reason) && !car))) {
+            WakeService.stop(getContext());
+        }
+        if (getPermissionState("microphone") != PermissionState.GRANTED) {
+            requestPermissionForAlias("microphone", call, "wakeMicCallback");
+            return;
+        }
+        startIfCharging(charging);
+        call.resolve(wakeState());
+    }
+
+    @PermissionCallback
+    private void wakeMicCallback(PluginCall call) {
+        startIfCharging(WakeService.prefs(getContext()).getBoolean("charging", false));
+        call.resolve(wakeState());
+    }
+
+    private void startIfCharging(boolean charging) {
+        // La app está a la vista, así que aquí siempre se puede iniciar el servicio.
+        if (charging && !WakeService.isRunning() && AssistService.isPlugged(getContext())) {
+            try {
+                WakeService.start(getContext(), "charging");
+            } catch (Exception ignored) { }
+        }
+    }
+
+    @PluginMethod
+    public void wakeStart(PluginCall call) {
+        try {
+            WakeService.start(getContext(), call.getString("reason", "manual"));
+            call.resolve(wakeState());
+        } catch (Exception e) {
+            call.reject("No se pudo activar Hola Oso: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void wakeStop(PluginCall call) {
+        WakeService.stop(getContext());
+        call.resolve(new JSObject().put("running", false));
+    }
+
+    /** Dispositivos Bluetooth emparejados, para elegir cuál es el auto. */
+    @PluginMethod
+    public void bluetoothDevices(PluginCall call) {
+        if (Build.VERSION.SDK_INT >= 31 && getPermissionState("bluetooth") != PermissionState.GRANTED) {
+            requestPermissionForAlias("bluetooth", call, "bluetoothCallback");
+            return;
+        }
+        listBluetooth(call);
+    }
+
+    @PermissionCallback
+    private void bluetoothCallback(PluginCall call) {
+        if (Build.VERSION.SDK_INT >= 31 && getPermissionState("bluetooth") != PermissionState.GRANTED) {
+            call.reject("Permiso de Bluetooth denegado", "permission");
+            return;
+        }
+        listBluetooth(call);
+    }
+
+    private void listBluetooth(PluginCall call) {
+        JSArray out = new JSArray();
+        try {
+            BluetoothManager bm = (BluetoothManager) getContext().getSystemService(Context.BLUETOOTH_SERVICE);
+            BluetoothAdapter adapter = bm != null ? bm.getAdapter() : null;
+            if (adapter != null) {
+                for (BluetoothDevice d : adapter.getBondedDevices()) {
+                    out.put(new JSObject().put("name", d.getName() != null ? d.getName() : d.getAddress())
+                        .put("address", d.getAddress()));
+                }
+            }
+            call.resolve(new JSObject().put("devices", out));
+        } catch (SecurityException e) {
+            call.reject("Permiso de Bluetooth denegado", "permission");
         }
     }
 

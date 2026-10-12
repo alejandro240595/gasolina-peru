@@ -871,6 +871,97 @@
     });
   }
 
+  // ------------------------------------------------------------ "Hola Oso"
+
+  var wake = { charging: false, car: false, devices: [], running: false };
+  var REASONS = { charging: 'mientras carga', car: 'en el auto', manual: 'activado a mano' };
+
+  function initWake() {
+    var A = Plugins.Assistant;
+    if (!A || !A.wakeStatus) { $('wake-box').hidden = true; return; }
+    $('wake-charging').addEventListener('change', saveWake);
+    $('wake-car').addEventListener('change', function () {
+      if (this.checked) loadBluetooth();
+      else $('wake-devices').hidden = true;
+      saveWake();
+    });
+    $('wake-now').addEventListener('click', function () {
+      var action = wake.running ? A.wakeStop() : A.wakeStart({ reason: 'manual' });
+      action.then(refreshWake).catch(function (err) { toast(err.message || String(err)); });
+    });
+    refreshWake();
+  }
+
+  function refreshWake() {
+    if (!Plugins.Assistant || !Plugins.Assistant.wakeStatus) return;
+    Plugins.Assistant.wakeStatus().then(renderWake).catch(function () {});
+  }
+
+  function renderWake(st) {
+    wake = st;
+    $('wake-charging').checked = !!st.charging;
+    $('wake-car').checked = !!st.car;
+    var status = $('wake-status');
+    status.className = 'wake-status' + (st.running ? ' on' : '');
+    status.textContent = st.running ? '🟢 Escuchando “Hola Oso” ' + (REASONS[st.reason] || '') : '⚪ Apagado';
+    var warn = $('wake-box').querySelector('.wake-warn');
+    if (!st.assistant && (st.charging || st.car)) {
+      if (!warn) {
+        warn = document.createElement('p');
+        warn.className = 'wake-warn';
+        status.insertAdjacentElement('afterend', warn);
+      }
+      warn.textContent = 'Para que se active solo al cargar o en el auto, Mi Asistente debe ser el asistente digital del teléfono.';
+    } else if (warn) {
+      warn.remove();
+    }
+    $('wake-now').textContent = st.running ? 'Detener' : 'Activar ahora';
+    $('wake-now').classList.toggle('stop', !!st.running);
+    if (st.car && $('wake-devices').hidden) loadBluetooth();
+  }
+
+  function saveWake() {
+    Plugins.Assistant.wakeConfigure({
+      charging: $('wake-charging').checked,
+      car: $('wake-car').checked,
+      devices: wake.devices || []
+    }).then(renderWake).catch(function (err) { toast(err.message || String(err)); });
+  }
+
+  function loadBluetooth() {
+    Plugins.Assistant.bluetoothDevices().then(function (r) {
+      var box = $('wake-devices');
+      box.innerHTML = '';
+      if (!r.devices.length) {
+        box.textContent = 'No hay dispositivos Bluetooth emparejados. Empareja primero el auto.';
+      }
+      r.devices.forEach(function (d) {
+        var chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'chip';
+        chip.textContent = '🚗 ' + d.name;
+        chip.setAttribute('aria-pressed', String((wake.devices || []).indexOf(d.address) >= 0));
+        chip.addEventListener('click', function () {
+          var list = (wake.devices || []).slice();
+          var i = list.indexOf(d.address);
+          if (i >= 0) list.splice(i, 1); else list.push(d.address);
+          wake.devices = list;
+          chip.setAttribute('aria-pressed', String(i < 0));
+          saveWake();
+        });
+        box.appendChild(chip);
+      });
+      var hint = document.createElement('p');
+      hint.className = 'wake-help';
+      hint.textContent = 'Marca el Bluetooth de tu auto:';
+      box.insertBefore(hint, box.firstChild);
+      box.hidden = false;
+    }).catch(function (err) {
+      $('wake-car').checked = false;
+      toast(err.message || String(err));
+    });
+  }
+
   // ------------------------------------------------------------ tema claro / oscuro
 
   var THEMES = [
@@ -968,6 +1059,7 @@
 
     $('refresh').addEventListener('click', refreshNow);
     applyTheme(recall('theme') || 'auto');
+    initWake();
     $('theme').addEventListener('click', nextTheme);
 
     if (Plugins.Assistant) {
@@ -989,6 +1081,7 @@
     if (Plugins.App) {
       // al volver a la app (no solo al abrirla desde cero), revisar como máximo cada 10 minutos
       Plugins.App.addListener('resume', function () {
+        refreshWake();
         if (Date.now() - lastUpdateCheck > 10 * 60000) checkUpdates(false);
       });
     }

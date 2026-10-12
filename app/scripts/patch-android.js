@@ -3,6 +3,7 @@
 //  - <queries> que Android 11+ necesita para encontrar los servicios de voz
 //  - servicios para que la app pueda ser el "asistente digital" del teléfono
 //  - copia el código nativo (app/native) y registra los plugins en MainActivity
+//  - "Hola Oso": servicio en primer plano, librería Vosk y modelo de voz español (app/vosk-model)
 const fs = require('fs');
 const path = require('path');
 
@@ -22,6 +23,10 @@ const permissions = [
   '<uses-permission android:name="android.permission.READ_CONTACTS" />',
   '<uses-permission android:name="android.permission.CALL_PHONE" />',
   '<uses-permission android:name="com.android.alarm.permission.SET_ALARM" />',
+  '<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />',
+  '<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />',
+  '<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />',
+  '<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />',
   '<uses-feature android:name="android.hardware.location.gps" android:required="false" />',
   '<uses-feature android:name="android.hardware.microphone" android:required="false" />',
   '<uses-feature android:name="android.hardware.telephony" android:required="false" />',
@@ -77,6 +82,10 @@ const services = `
             </intent-filter>
             <meta-data android:name="android.speech" android:resource="@xml/recognition_service" />
         </service>
+        <service
+            android:name=".WakeService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
 `;
 
 const missing = permissions.filter((p) => !xml.includes(p.match(/android:name="([^"]+)"/)[1]));
@@ -98,6 +107,33 @@ if (fs.existsSync(path.join(nativeDir, 'AssistService.java')) && !xml.includes('
 }
 fs.writeFileSync(manifestPath, xml);
 console.log('AndroidManifest actualizado:', missing.length, 'permisos añadidos');
+
+// ------------------------------------------------------------------ build.gradle (Vosk)
+const gradlePath = path.join(appDir, 'android', 'app', 'build.gradle');
+let gradle = fs.readFileSync(gradlePath, 'utf8');
+if (!gradle.includes('vosk-android')) {
+  gradle = gradle.replace(/^dependencies \{/m, `dependencies {
+    implementation 'com.alphacephei:vosk-android:0.3.47@aar'
+    implementation 'net.java.dev.jna:jna:5.13.0@aar'`);
+  // solo procesadores de 64 y 32 bits ARM (celulares reales): el APK pesa bastante menos
+  gradle = gradle.replace(/defaultConfig \{/, `defaultConfig {
+        ndk { abiFilters 'arm64-v8a', 'armeabi-v7a' }`);
+  fs.writeFileSync(gradlePath, gradle);
+  console.log('build.gradle: Vosk añadido');
+}
+
+// ------------------------------------------------------------------ modelo de voz para "Hola Oso"
+const modelSrc = path.join(appDir, 'vosk-model', 'model-es');
+const modelDst = path.join(mainDir, 'assets', 'model-es');
+if (fs.existsSync(modelSrc)) {
+  fs.rmSync(modelDst, { recursive: true, force: true });
+  copyDir(modelSrc, modelDst);
+  // StorageService de Vosk usa este archivo para saber si debe volver a copiar el modelo
+  fs.writeFileSync(path.join(modelDst, 'uuid'), 'vosk-model-small-es-0.42');
+  console.log('Modelo de voz copiado a assets/model-es');
+} else {
+  console.warn('AVISO: falta app/vosk-model/model-es; "Hola Oso" no funcionará');
+}
 
 // ------------------------------------------------------------------ código y recursos nativos
 function copyDir(src, dst) {

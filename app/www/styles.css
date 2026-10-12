@@ -245,3 +245,16 @@ html, body { overflow-x: hidden; }
 .setting { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; color: var(--muted); }
 .setting select { max-width: 60%; font-size: 14px; }
 .countdown[hidden] { display: none; }
+
+/* ---------- Hola Oso ---------- */
+.wake[hidden] { display: none; }
+.wake-status { font-weight: 700; margin: 10px 0 4px; }
+.wake-status.on { color: var(--good); }
+.wake-help { font-size: 13px; color: var(--muted); margin: 0 0 6px; }
+.wake-warn { font-size: 13px; color: var(--warn); margin: 6px 0 0; }
+.wake .toggle { margin-top: 8px; }
+.wake-btn {
+  margin-top: 12px; width: 100%; font: inherit; font-weight: 700; border: 0; border-radius: 12px; padding: 11px;
+  background: var(--accent); color: var(--accent-text);
+}
+.wake-btn.stop { background: var(--bg); color: var(--text); border: 1px solid var(--border); }

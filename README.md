@@ -27,6 +27,17 @@ La app se registra como **asistente digital** (`AssistService`, `AssistSessionSe
 “Hey Google” no se puede reemplazar: Android reserva la palabra de activación a apps del sistema.
 Para volver a Gemini, repite el paso 1 y elige Google.
 
+### “Hola Oso” (manos libres, sin internet)
+
+`WakeService` escucha solo la frase “hola oso” con [Vosk](https://alphacephei.com/vosk/) (modelo
+`vosk-model-small-es-0.42`, ~40 MB, se descarga en el workflow) y abre el asistente; suena un bip y dices la orden.
+Se activa **solo mientras el celular carga** o **conectado al Bluetooth del auto** (se elige en la app), y se
+apaga al desconectar. `AssistService` vigila el cargador y el Bluetooth, por eso Mi Asistente debe ser el
+asistente digital. Mientras escucha hay una notificación con *Detener*.
+
+En Samsung conviene: *Ajustes → Batería → Límites de uso en segundo plano → Apps que nunca se suspenden →
+Mi Asistente*.
+
 La voz se reconoce **en el teléfono** (Android 12+) con el plugin nativo `app/native/AssistantPlugin.java`.
 Si tu teléfono no tiene el español sin conexión, ve a *Ajustes → Google → Voz (o Asistente) →
 Reconocimiento de voz sin conexión* y descarga **Español (Estados Unidos)**.

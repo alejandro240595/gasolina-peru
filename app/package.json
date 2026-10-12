@@ -1,6 +1,6 @@
 {
   "name": "gasolina-peru",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "private": true,
   "description": "Asistente de voz local: llamadas, lugares (Google Maps) y precios de combustible de Osinergmin",
   "scripts": {
@@ -20,7 +20,7 @@
     "@capacitor/cli": "^7.0.0"
   },
   "gasolina": {
-    "nativeLevel": 5,
+    "nativeLevel": 6,
     "//": "Subir nativeLevel cuando cambien plugins, permisos o capacitor.config: obliga a instalar APK nuevo"
   }
 }

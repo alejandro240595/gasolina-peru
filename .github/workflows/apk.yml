@@ -56,6 +56,23 @@ jobs:
 
       - run: npm install --no-audit --no-fund
 
+      # Modelo de voz español sin conexión para "Hola Oso" (~40 MB, se guarda en caché)
+      - name: Caché del modelo de voz
+        uses: actions/cache@v4
+        with:
+          path: app/vosk-model
+          key: vosk-model-small-es-0.42
+
+      - name: Descargar modelo de voz
+        run: |
+          if [ ! -d vosk-model/model-es ]; then
+            curl -sSL -o /tmp/model.zip https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip
+            mkdir -p vosk-model
+            unzip -q /tmp/model.zip -d vosk-model
+            mv vosk-model/vosk-model-small-es-0.42 vosk-model/model-es
+          fi
+          du -sh vosk-model/model-es
+
       - name: Crear proyecto Android
         run: |
           npx cap add android
