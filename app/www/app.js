@@ -973,43 +973,13 @@
 
   // ------------------------------------------------------------ texto hablado
 
-  var ABBREVIATIONS = [
-    [/\bAV(DA)?\.?\s/g, 'avenida '], [/\bJR\.?\s/g, 'jirón '], [/\bCA(L|LLE)?\.?\s/g, 'calle '],
-    [/\bPROL(ONG)?\.?\s/g, 'prolongación '], [/\bCARR?\.?\s/g, 'carretera '], [/\bPSJE?\.?\s/g, 'pasaje '],
-    [/\bMZ\.?\s/g, 'manzana '], [/\bLT\.?\s/g, 'lote '], [/\bN[°º]\s?/g, 'número '], [/\bKM\.?\s/g, 'kilómetro '],
-    [/\bS\/N\b/g, 'sin número'], [/\bESQ\.?\s/g, 'esquina '], [/\bURB\.?\s/g, 'urbanización ']
-  ];
-
-  function spokenAddress(s) {
-    var a = s.a.split(/[,(]/)[0].toUpperCase() + ' ';
-    ABBREVIATIONS.forEach(function (r) { a = a.replace(r[0], r[1]); });
-    a = a.trim().toLowerCase();
-    if (a.length > 70) a = a.slice(0, 70).replace(/\s\S*$/, '');
-    return a;
-  }
-
-  function spokenPrice(v) {
-    var soles = Math.floor(v), cents = Math.round((v - soles) * 100);
-    return soles + ' soles' + (cents ? ' con ' + cents : '');
-  }
-
-  function spokenKm(k) {
-    return k < 1 ? Math.round(k * 10) * 100 + ' metros' : k.toFixed(1).replace('.0', '').replace('.', ' coma ') + ' kilómetros';
-  }
-
+  // Al listar grifos solo se dice un resumen corto; el detalle queda en la pantalla.
   function sentence(out) {
-    var fuel = FUEL_GROUPS[state.fuel].label.replace(/\(.*\)/, '').trim();
-    var brands = state.brands.length ? ' ' + state.brands.join(' o ') : '';
-    if (!out.total) return 'No encontré grifos' + brands + ' con ' + fuel + ' a menos de ' + out.radius + ' kilómetros.';
-    var parts = ['Encontré ' + out.total + ' grifos' + brands + ' con ' + fuel + ' a menos de ' + out.radius + ' kilómetros.'];
-    var ordinal = ['El ' + (state.sort === 'distance' ? 'más cercano' : 'más barato'), 'Luego', 'Después'];
-    out.list.slice(0, 3).forEach(function (c, i) {
-      var who = c.s.b || (c.s.gn || c.s.n).toLowerCase();
-      parts.push(ordinal[i] + ': ' + who + ', en ' + spokenAddress(c.s) + ', a ' +
-        (c.s.q === 'c' ? 'unos ' : '') + spokenKm(c.km) + ', a ' + spokenPrice(c.price) +
-        (unitOf(c.key) === 'gal' ? ' el galón.' : ' el metro cúbico.'));
-    });
-    return parts.join(' ');
+    if (!out.total) {
+      return 'No encontré grifos' + (state.brands.length ? ' ' + state.brands.join(' o ') : '') +
+        ' a menos de ' + out.radius + ' kilómetros.';
+    }
+    return 'Listo, encontré ' + (out.total === 1 ? 'un grifo' : out.total + ' grifos') + '.';
   }
 
   // ------------------------------------------------------------ controles
