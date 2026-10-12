@@ -159,9 +159,28 @@
         if (state.fuel && $('results').children.length) runSearch(position, false);
       })
       .catch(function (err) {
-        setStatusBusy(false);
-        showDataStatus();
-        toast('No se pudo actualizar: ' + (err.message || err));
+        // Osinergmin falló: probar con la copia de GitHub (se actualiza cada 3 horas)
+        var offline = GasOsinergmin.isNetworkError(err);
+        setStatusBusy(true, 'Osinergmin no responde, probando GitHub…');
+        var before = data ? pricesTime() : 0;
+        return fetch(window.GAS_CONFIG.dataUrl, { cache: 'no-cache' })
+          .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+          .then(function (json) {
+            dataSavedAt = Date.now();
+            store('stations', { savedAt: dataSavedAt, data: json });
+            data = json;
+            applyLivePrices();
+            setStatusBusy(false);
+            showDataStatus();
+            toast(pricesTime() > before ? '✓ Precios actualizados desde GitHub'
+                                        : 'Osinergmin no responde; ya tienes los últimos precios de GitHub');
+          })
+          .catch(function () {
+            setStatusBusy(false);
+            showDataStatus();
+            var kept = data ? ' Se mantienen los precios guardados (' + ago(pricesTime()) + ').' : '';
+            toast((offline ? 'Sin conexión a internet.' : 'No se pudo actualizar: ' + (err.message || err) + '.') + kept);
+          });
       });
   }
 

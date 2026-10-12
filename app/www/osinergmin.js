@@ -88,7 +88,9 @@
   function download(http) {
     var year = new Date().getFullYear();
     function attempt(y) {
+      // Sin User-Agent el servidor de Osinergmin responde 403.
       return http.request({ method: 'GET', url: URL.replace('{year}', y), responseType: 'arraybuffer',
+                            headers: { 'User-Agent': 'Mozilla/5.0 (Linux; Android) MiAsistente/2', 'Accept': '*/*' },
                             connectTimeout: 20000, readTimeout: 60000 })
         .then(function (res) {
           if (res.status !== 200) throw new Error('Osinergmin respondió ' + res.status);
@@ -103,7 +105,13 @@
     });
   }
 
-  var api = { parseXlsx: parseXlsx, download: download };
+  // Mensaje entendible para errores de red de Android/Java
+  function isNetworkError(err) {
+    return /resolve host|UnknownHost|timeout|timed out|failed to connect|Network|ECONN|SSL|connection/i
+      .test(String(err && (err.message || err)));
+  }
+
+  var api = { parseXlsx: parseXlsx, download: download, isNetworkError: isNetworkError };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.GasOsinergmin = api;
 })(this);
