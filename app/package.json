@@ -1,6 +1,6 @@
 {
   "name": "gasolina-peru",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": true,
   "description": "Precios de combustible de Osinergmin con asistente de voz",
   "scripts": {

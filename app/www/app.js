@@ -7,9 +7,11 @@
   var BRANDS = ['Primax', 'Repsol', 'Petroperú', 'Pecsa', 'Mobil', 'Shell', 'Terpel', 'Puma'];
   var AUTO_RADII = [3, 5, 10, 20, 50, 100];
   var MAX_RESULTS = 10;
-  var DATA_MAX_AGE_MS = 6 * 3600 * 1000;
+  var DATA_MAX_AGE_MS = 1 * 3600 * 1000;
+  var MIN_LOADING_MS = 700;   // que la animación se alcance a ver aunque la búsqueda sea instantánea
 
   var data = null;
+  var dataSavedAt = 0;
   var position = null;
   var state = { fuel: '', brands: [], radiusKm: null, sort: 'price' };
 
@@ -27,12 +29,16 @@
   // ------------------------------------------------------------ datos
 
   function loadData() {
-    var cached = recall('stations');
-    if (cached && cached.data) {
-      data = cached.data;
-      showDataStatus();
-      if (Date.now() - cached.savedAt < DATA_MAX_AGE_MS) return Promise.resolve();
+    if (!data) {
+      var cached = recall('stations');
+      if (cached && cached.data) {
+        data = cached.data;
+        dataSavedAt = cached.savedAt;
+        showDataStatus();
+      }
     }
+    if (data && Date.now() - dataSavedAt < DATA_MAX_AGE_MS) return Promise.resolve();
+    $('data-status').classList.add('refreshing');
     return fetch(window.GAS_CONFIG.dataUrl, { cache: 'no-cache' })
       .then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -40,12 +46,14 @@
       })
       .then(function (json) {
         data = json;
-        store('stations', { savedAt: Date.now(), data: json });
+        dataSavedAt = Date.now();
+        store('stations', { savedAt: dataSavedAt, data: json });
         showDataStatus();
       })
       .catch(function (err) {
         if (!data) $('data-status').textContent = 'No se pudieron cargar los precios (' + err.message + ').';
-      });
+      })
+      .then(function () { $('data-status').classList.remove('refreshing'); });
   }
 
   function showDataStatus() {
@@ -185,23 +193,78 @@
 
   // ------------------------------------------------------------ búsqueda
 
+  var searchId = 0;
+
   function runSearch(posPromise, talk) {
     if (!state.fuel) { showMessage('Elige un combustible.'); return; }
-    if (!data) { showMessage('Aún no hay precios cargados.'); return; }
-    showMessage('Buscando…');
-    Promise.resolve(posPromise || (position ? position : getPosition()))
+    var id = ++searchId;
+    var started = Date.now();
+    var current = function () { return id === searchId; };   // ignora búsquedas ya reemplazadas
+
+    var stale = !data || Date.now() - dataSavedAt >= DATA_MAX_AGE_MS;
+    setLoading(stale ? 'Actualizando precios…' : 'Ubicándote…', stale ? 0 : 1);
+    (stale ? loadData() : Promise.resolve())
+      .then(function () {
+        if (!data) throw new Error('No se pudieron cargar los precios. Revisa tu conexión.');
+        if (current()) setLoading('Ubicándote…', 1);
+        return posPromise || (position ? position : getPosition());
+      })
       .then(function (pos) {
         pos = pos || position;
         if (!pos) throw new Error('Activa el GPS para buscar grifos cercanos.');
+        if (current()) setLoading('Buscando grifos…', 2);
         var out = search(pos);
+        return new Promise(function (resolve) {
+          setTimeout(function () { resolve(out); }, Math.max(0, MIN_LOADING_MS - (Date.now() - started)));
+        });
+      })
+      .then(function (out) {
+        if (!current()) return;
         render(out);
         if (talk) speak(sentence(out));
       })
       .catch(function (err) {
+        if (!current()) return;
         var msg = err.message || 'No se pudo obtener tu ubicación.';
+        $('results').innerHTML = '';
         showMessage(msg);
         if (talk) speak(msg);
       });
+  }
+
+  var STEPS = ['Precios', 'Ubicación', 'Grifos'];
+
+  function setLoading(text, step) {
+    var summary = $('summary');
+    summary.hidden = false;
+    summary.className = 'summary loading';
+    summary.innerHTML =
+      '<span class="pump" aria-hidden="true">' +
+      '<svg viewBox="0 0 24 24"><path d="M3 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v7h1a2 2 0 0 1 2 2v3a1 1 0 0 0 2 0V9.4l-2.7-2.7 1.4-1.4 3.3 3.3V17a3 3 0 0 1-6 0v-3h-1v7H3zm3-15v5h5V6H6z"/></svg>' +
+      '<i class="drop"></i></span>' +
+      '<span class="loading-body"><span class="loading-text"></span>' +
+      '<span class="steps"></span><span class="bar"><span></span></span></span>';
+    summary.querySelector('.loading-text').textContent = text;
+    var steps = summary.querySelector('.steps');
+    STEPS.forEach(function (name, i) {
+      var s = document.createElement('span');
+      s.textContent = (i < step ? '✓ ' : '') + name;
+      s.className = i < step ? 'done' : i === step ? 'active' : '';
+      steps.appendChild(s);
+    });
+
+    var ol = $('results');
+    if (!ol.querySelector('.skeleton')) {
+      ol.innerHTML = '';
+      for (var i = 0; i < 3; i++) {
+        var li = document.createElement('li');
+        li.className = 'station skeleton';
+        li.innerHTML = '<span class="sk sk-title"></span><span class="sk sk-price"></span>' +
+          '<span class="sk sk-line"></span><span class="sk sk-line short"></span>';
+        li.style.animationDelay = (i * 120) + 'ms';
+        ol.appendChild(li);
+      }
+    }
   }
 
   function search(pos) {
@@ -254,10 +317,11 @@
       ? out.total + ' grifos con ' + fuelLabel + brandsLabel + ' a menos de ' + out.radius + ' km'
       : 'No hay grifos con ' + fuelLabel + brandsLabel + ' a menos de ' + out.radius + ' km.');
 
-    out.list.forEach(function (c) {
+    out.list.forEach(function (c, idx) {
       var s = c.s;
       var li = document.createElement('li');
-      li.className = 'station';
+      li.className = 'station appear';
+      li.style.animationDelay = Math.min(idx, 6) * 60 + 'ms';
       var approx = s.q === 'c';
       li.innerHTML =
         '<div><div class="name"></div><div class="meta"></div></div>' +
@@ -339,6 +403,7 @@
 
   function showMessage(text) {
     $('summary').hidden = false;
+    $('summary').className = 'summary';
     $('summary').textContent = text;
   }
 
