@@ -326,17 +326,157 @@
       if (!chosen || (chosen.intent.type === 'unknown' && c.type !== 'unknown')) chosen = { text: m, intent: c };
     });
     showHeard(chosen.text);
-    var intent = chosen.intent;
-    if (intent.type === 'call') return handleCall(intent, matches);
-    if (intent.type === 'whatsapp') return handleWhatsApp(intent, matches);
-    if (intent.type === 'torch') return handleTorch(intent);
-    if (intent.type === 'alarm') return handleAlarm(intent.time);
-    if (intent.type === 'timer') return handleTimer(intent.seconds);
-    if (intent.type === 'fuel') return handleFuel(intent.fuel);
-    if (intent.type === 'place') return handlePlace(intent);
+    // preguntas generales ("¿qué es…?", "¿cuánto es…?") van directo a la IA local
+    if (brainReady() && GasBrain.looksLikeQuestion(chosen.text)) return askBrain(chosen.text);
+    if (runIntent(chosen.intent, matches)) return;
+    if (brainReady()) return askBrain(chosen.text);
     var msg = 'No entendí. Puedes decir: llama a mamá, prende la linterna, llévame a Plaza San Miguel, o gasohol noventa y cinco.';
     showMessage(msg);
     speak(msg);
+  }
+
+  // Ejecuta una intención (de las reglas o de la IA). false si no es una acción conocida.
+  function runIntent(intent, matches) {
+    switch (intent.type) {
+      case 'call': handleCall(intent, matches || []); return true;
+      case 'whatsapp': handleWhatsApp(intent, matches || []); return true;
+      case 'torch': handleTorch(intent); return true;
+      case 'alarm': handleAlarm(intent.time); return true;
+      case 'timer': handleTimer(intent.seconds); return true;
+      case 'fuel': handleFuel(intent.fuel); return true;
+      case 'place': handlePlace(intent); return true;
+    }
+    return false;
+  }
+
+  // ------------------------------------------------------------ IA local
+
+  var brain = { downloaded: false, loaded: false, loading: false };
+  var brainHistory = [];
+  var brainBusy = false;
+
+  function brainEnabled() { return recall('brainOn') !== false; }
+  function brainReady() { return !!Plugins.Brain && brain.downloaded && brainEnabled(); }
+
+  var INTENT_LABELS = {
+    call: function (i) { return 'llamar a ' + i.name; },
+    whatsapp: function (i) { return 'WhatsApp a ' + i.name + (i.message ? ': “' + i.message + '”' : ''); },
+    torch: function (i) { return i.on === false ? 'apagar la linterna' : 'prender la linterna'; },
+    alarm: function (i) { return 'alarma a las ' + i.time.hour + ':' + ('0' + i.time.minutes).slice(-2); },
+    timer: function (i) { return 'temporizador de ' + i.seconds + ' s'; },
+    fuel: function () { return 'buscar gasolina'; },
+    place: function (i) { return (i.mode === 'navigate' ? 'ir a ' : 'buscar ') + i.query; }
+  };
+
+  function askBrain(text) {
+    if (brainBusy) Plugins.Brain.cancel();
+    brainBusy = true;
+    var ol = $('results');
+    ol.innerHTML = '';
+    $('summary').hidden = true;
+    var li = document.createElement('li');
+    li.className = 'answer appear thinking';
+    li.innerHTML = '<div class="answer-head">🐻 <span>Pensando</span><i class="dots"><b></b><b></b><b></b></i></div>' +
+      '<div class="answer-text"></div>';
+    ol.appendChild(li);
+    var view = li.querySelector('.answer-text');
+    var partial = '';
+    var listener = Plugins.Brain.addListener('token', function (e) {
+      partial += e.text;
+      var shown = GasBrain.streamingView(partial);
+      if (shown) { li.classList.remove('thinking'); view.textContent = shown.replace(/<\|im_end\|>[\s\S]*$/, ''); }
+    });
+    var started = Date.now();
+    Plugins.Brain.generate({ prompt: GasBrain.buildPrompt(text, brainHistory), temperature: 0.2 })
+      .then(function (r) {
+        var reply = GasBrain.parseReply(r.text);
+        var secs = ((Date.now() - started) / 1000).toFixed(1).replace('.', ',');
+        li.classList.remove('thinking');
+        li.querySelector('.answer-head span').textContent = 'IA local · ' + secs + ' s';
+        if (reply.kind === 'action') {
+          var label = (INTENT_LABELS[reply.intent.type] || function () { return 'acción'; })(reply.intent);
+          view.textContent = 'Entendí: ' + label;
+          remember(text, r.text);
+          // las acciones reemplazan la tarjeta con su propio resultado; dejarla visible un instante
+          setTimeout(function () { runIntent(reply.intent, []); }, 350);
+        } else if (reply.kind === 'answer') {
+          view.textContent = reply.text;
+          remember(text, 'RESPUESTA ' + reply.text);
+          speak(reply.text);
+        } else {
+          view.textContent = 'No entendí. Intenta decirlo de otra forma.';
+          speak('No entendí. Intenta decirlo de otra forma.');
+        }
+      })
+      .catch(function (err) {
+        li.classList.remove('thinking');
+        view.textContent = err.message || String(err);
+      })
+      .then(function () {
+        brainBusy = false;
+        Promise.resolve(listener).then(function (h) { if (h && h.remove) h.remove(); });
+        refreshBrain();
+      });
+  }
+
+  function remember(user, assistant) {
+    brainHistory.push({ user: user, assistant: assistant.split('\n')[0] });
+    if (brainHistory.length > 3) brainHistory.shift();
+  }
+
+  // ---- ajustes de la IA (descarga, estado)
+
+  var brainPoll = null;
+
+  function initBrain() {
+    if (!Plugins.Brain) { $('brain-box').hidden = true; return; }
+    $('brain-on').checked = brainEnabled();
+    $('brain-on').addEventListener('change', function () { store('brainOn', this.checked); });
+    $('brain-download').addEventListener('click', function () { downloadBrain(false); });
+    $('brain-download-data').addEventListener('click', function () { downloadBrain(true); });
+    $('brain-delete').addEventListener('click', function () {
+      Plugins.Brain.deleteModel().then(function () { toast('Modelo de IA borrado'); refreshBrain(); });
+    });
+    refreshBrain().then(function () {
+      // cargar el modelo de antemano para que la primera pregunta sea rápida
+      if (brain.downloaded && !brain.loaded && brainEnabled()) {
+        Plugins.Brain.load().then(refreshBrain, refreshBrain);
+        setTimeout(refreshBrain, 300);
+      }
+    });
+  }
+
+  function downloadBrain(mobileData) {
+    Plugins.Brain.download({ mobileData: mobileData })
+      .then(function () { toast('Descarga iniciada: ver la notificación'); refreshBrain(); })
+      .catch(function (err) { toast(err.message || String(err)); });
+  }
+
+  function refreshBrain() {
+    if (!Plugins.Brain) return Promise.resolve();
+    return Plugins.Brain.status().then(function (st) {
+      brain = st;
+      var text, pct = null;
+      var d = st.download;
+      if (st.loaded) text = '🟢 Lista (' + (st.backend === 'GPU' ? 'GPU' : 'CPU') + ')';
+      else if (st.loading) text = '⏳ Cargando la IA en memoria…';
+      else if (st.downloaded) text = st.error ? '⚠️ ' + st.error : '⚪ Descargada (se carga al usarla)';
+      else if (d && d.state !== 'failed') {
+        pct = Math.floor(d.bytes / st.totalBytes * 100);
+        text = d.state === 'waiting_wifi' ? '⏸️ Esperando Wi‑Fi… ' + pct + ' %' : '⬇️ Descargando… ' + pct + ' %';
+      } else text = d && d.state === 'failed' ? '⚠️ La descarga falló, intenta de nuevo' : '⚪ No descargada';
+      $('brain-status').textContent = text;
+      var bar = $('brain-progress');
+      bar.hidden = pct === null;
+      if (pct !== null) bar.querySelector('span').style.width = pct + '%';
+      var busy = d && !st.downloaded && d.state !== 'failed';
+      $('brain-download').hidden = st.downloaded || busy;
+      $('brain-download-data').hidden = st.downloaded || busy;
+      $('brain-delete').hidden = !st.downloaded && !busy;
+      $('brain-delete').textContent = busy ? 'Cancelar descarga' : 'Borrar modelo (libera 1,6 GB)';
+      clearTimeout(brainPoll);
+      if (busy || st.loading) brainPoll = setTimeout(refreshBrain, 2000);
+    }).catch(function () {});
   }
 
   function handleFuel(parsed) {
@@ -1060,6 +1200,7 @@
     $('refresh').addEventListener('click', refreshNow);
     applyTheme(recall('theme') || 'auto');
     initWake();
+    initBrain();
     $('theme').addEventListener('click', nextTheme);
 
     if (Plugins.Assistant) {
@@ -1082,6 +1223,7 @@
       // al volver a la app (no solo al abrirla desde cero), revisar como máximo cada 10 minutos
       Plugins.App.addListener('resume', function () {
         refreshWake();
+        refreshBrain();
         if (Date.now() - lastUpdateCheck > 10 * 60000) checkUpdates(false);
       });
     }

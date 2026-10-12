@@ -51,6 +51,7 @@
         <li>💬 “WhatsApp a Juan diciendo ya llegué”</li>
         <li>📍 “Farmacias cerca”</li>
         <li>⛽ “Gasohol 95 en Primax o Repsol”</li>
+        <li>🧠 “¿Cuánto es el 18 % de 250?”</li>
       </ul>
       <p id="heard" class="heard" hidden></p>
     </section>
@@ -96,6 +97,17 @@
       </div>
       <div id="brands" class="chips" aria-label="Marcas"></div>
     </details>
+    <details class="filters brain" id="brain-box">
+      <summary>🧠 IA local (sin internet)</summary>
+      <p id="brain-status" class="wake-status">…</p>
+      <div id="brain-progress" class="progress" hidden><span></span></div>
+      <p class="wake-help">Modelo <strong>Qwen 2.5 (1,5 B)</strong> que corre en tu celular. Entiende órdenes dichas de cualquier forma
+        (“avísale a mi esposa que llego tarde”) y responde preguntas simples. Puede equivocarse y no sabe noticias.</p>
+      <label class="toggle"><input id="brain-on" type="checkbox"> Usar la IA cuando no entienda la orden</label>
+      <button id="brain-download" class="wake-btn" type="button">Descargar (1,6 GB, con Wi‑Fi)</button>
+      <button id="brain-download-data" class="wake-btn stop" type="button">Descargar con datos móviles</button>
+      <button id="brain-delete" class="wake-btn stop" type="button" hidden>Borrar modelo</button>
+    </details>
     <details class="filters wake" id="wake-box">
       <summary>🐻 “Hola Oso” manos libres</summary>
       <p id="wake-status" class="wake-status">…</p>
@@ -125,6 +137,7 @@
   <script src="updater.js"></script>
   <script src="parser.js"></script>
   <script src="intents.js"></script>
+  <script src="brain.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -143,3 +143,15 @@ python -m http.server -d app/www 8000    # probar la interfaz en el navegador
 
 Para probar en local, cambia `app/www/config.js` a `dataUrl: '/stations.json'` y copia
 `data/stations.json` a `app/www/` (no lo subas así; el workflow de APK reescribe `config.js`).
+
+### IA local (sin internet)
+
+`BrainPlugin` corre **Qwen 2.5 1.5B Instruct** (Apache 2.0, formato MediaPipe `.task`, 1,6 GB) en el teléfono con
+[MediaPipe LLM Inference](https://ai.google.dev/edge/mediapipe/solutions/genai/llm_inference) (GPU, o CPU si falla).
+El modelo se descarga desde la app (*🧠 IA local*) con el administrador de descargas de Android, solo con Wi‑Fi salvo
+que elijas datos móviles.
+
+Flujo: las reglas de `intents.js` van primero (instantáneas). Si no entienden la frase, o es una pregunta
+("¿qué es…?", "¿cuánto es…?"), `brain.js` arma el prompt (instrucciones + ejemplos + últimas 3 interacciones) y el
+modelo responde `ACCION {json}` → se ejecuta como cualquier orden, o `RESPUESTA texto` → se muestra mientras se
+escribe y se lee en voz alta. Un modelo de este tamaño puede equivocarse y no sabe noticias.

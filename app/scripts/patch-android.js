@@ -108,18 +108,19 @@ if (fs.existsSync(path.join(nativeDir, 'AssistService.java')) && !xml.includes('
 fs.writeFileSync(manifestPath, xml);
 console.log('AndroidManifest actualizado:', missing.length, 'permisos añadidos');
 
-// ------------------------------------------------------------------ build.gradle (Vosk)
+// ------------------------------------------------------------------ build.gradle (Vosk + IA local MediaPipe)
 const gradlePath = path.join(appDir, 'android', 'app', 'build.gradle');
 let gradle = fs.readFileSync(gradlePath, 'utf8');
 if (!gradle.includes('vosk-android')) {
   gradle = gradle.replace(/^dependencies \{/m, `dependencies {
     implementation 'com.alphacephei:vosk-android:0.3.47@aar'
-    implementation 'net.java.dev.jna:jna:5.13.0@aar'`);
+    implementation 'net.java.dev.jna:jna:5.13.0@aar'
+    implementation 'com.google.mediapipe:tasks-genai:0.10.35'`);
   // solo procesadores de 64 y 32 bits ARM (celulares reales): el APK pesa bastante menos
   gradle = gradle.replace(/defaultConfig \{/, `defaultConfig {
         ndk { abiFilters 'arm64-v8a', 'armeabi-v7a' }`);
   fs.writeFileSync(gradlePath, gradle);
-  console.log('build.gradle: Vosk añadido');
+  console.log('build.gradle: Vosk y MediaPipe añadidos');
 }
 
 // ------------------------------------------------------------------ modelo de voz para "Hola Oso"
