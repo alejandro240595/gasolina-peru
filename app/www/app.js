@@ -419,9 +419,21 @@
   }
 
   var CALL_DELAY_MS = 3000;
+  var SURE_SCORE = 80;   // por encima: el nombre coincide claramente (exacto, apodo o inicio del nombre)
+
+  // ¿Esperar 3 s con "Cancelar" antes de llamar? Según el ajuste "Antes de llamar":
+  //  instant: nunca · unsure: solo si el contacto se eligió por parecido · always: siempre
+  function shouldWait(contact) {
+    var mode = recall('callMode') || 'unsure';
+    if (mode === 'instant') return false;
+    if (mode === 'always') return true;
+    var sure = contact.chosen || contact.score === undefined || contact.score > SURE_SCORE;
+    return !sure;
+  }
 
   function confirmCall(contact) {
     cancelPendingCall(true);
+    var wait = shouldWait(contact);
     var ol = $('results');
     ol.innerHTML = '';
     showMessage('Llamando a ' + contact.name);
@@ -434,6 +446,10 @@
     li.querySelector('.call-name').textContent = contact.name;
     li.querySelector('.call-number').textContent = contact.number;
     li.querySelector('.countdown span').style.animationDuration = CALL_DELAY_MS + 'ms';
+    if (!wait) {
+      li.querySelector('.countdown').hidden = true;
+      li.querySelector('.call-actions').hidden = true;
+    }
     ol.appendChild(li);
 
     var go = function () {
@@ -446,6 +462,11 @@
       Plugins.Assistant.call({ number: contact.number })
         .catch(function (err) { showMessage(err.message); });
     };
+    if (!wait) {   // contacto claro: llamar ya, sin hablar (la voz se cruzaría con la llamada)
+      pendingCall = { timer: null, card: li };
+      go();
+      return;
+    }
     pendingCall = { timer: setTimeout(go, CALL_DELAY_MS), card: li };
     li.querySelector('.now').addEventListener('click', go);
     li.querySelector('.cancel').addEventListener('click', function () { cancelPendingCall(false); });
@@ -477,7 +498,7 @@
       li.addEventListener('click', function () {
         if (Plugins.Assistant) Plugins.Assistant.cancelListening();
         answered = true;
-        action(o);
+        action(Object.assign({ chosen: true }, o));
       });
       ol.appendChild(li);
     });
@@ -494,7 +515,7 @@
       if (!matches || !matches.length) return;
       showHeard(matches[0]);
       var idx = GasIntents.pickOption(matches[0], options);
-      if (idx >= 0) action(options[idx]);
+      if (idx >= 0) action(Object.assign({ chosen: true }, options[idx]));
       else if (idx === -1) { showMessage('Cancelado'); speak('Cancelado'); ol.innerHTML = ''; }
       else speak('No entendí. Toca el contacto en la pantalla.');
     }).catch(function () { setListening(false); });
@@ -892,6 +913,10 @@
     $('fuel').addEventListener('change', function () { state.fuel = this.value; syncControls(); runSearch(null, false); });
     $('radius').addEventListener('change', function () { state.radiusKm = Number(this.value) || null; runSearch(null, false); });
     $('sort').addEventListener('change', function () { state.sort = this.value; runSearch(null, false); });
+
+    var callMode = $('call-mode');
+    callMode.value = recall('callMode') || 'unsure';
+    callMode.addEventListener('change', function () { store('callMode', callMode.value); });
 
     var auto = $('autolisten');
     auto.checked = recall('autolisten') !== false;   // por defecto escucha al abrir

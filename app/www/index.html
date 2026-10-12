@@ -87,7 +87,16 @@
       </div>
       <div id="brands" class="chips" aria-label="Marcas"></div>
     </details>
-    <label class="toggle"><input id="autolisten" type="checkbox"> Escuchar al abrir la app</label>
+    <div class="settings">
+      <label class="toggle"><input id="autolisten" type="checkbox"> Escuchar al abrir la app</label>
+      <label class="setting">Antes de llamar
+        <select id="call-mode">
+          <option value="unsure">Esperar 3 s solo si no está seguro</option>
+          <option value="instant">Llamar al instante siempre</option>
+          <option value="always">Esperar 3 s siempre</option>
+        </select>
+      </label>
+    </div>
     <p id="version" class="version"></p>
   </main>
 

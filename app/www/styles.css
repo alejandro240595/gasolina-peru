@@ -217,3 +217,10 @@ html, body { overflow-x: hidden; }
 .option .who { font-weight: 700; }
 .option .tel { color: var(--muted); font-size: 14px; }
 .option, .callcard { animation: appear .35s ease-out both; }
+
+/* ---------- ajustes ---------- */
+.settings { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.settings .toggle { margin-top: 0; }
+.setting { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; color: var(--muted); }
+.setting select { max-width: 60%; font-size: 14px; }
+.countdown[hidden] { display: none; }
