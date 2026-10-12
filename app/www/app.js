@@ -326,6 +326,7 @@
       if (!chosen || (chosen.intent.type === 'unknown' && c.type !== 'unknown')) chosen = { text: m, intent: c };
     });
     showHeard(chosen.text);
+    $('fuel-bar').hidden = true;   // runSearch la vuelve a mostrar si la orden es de gasolina
     // preguntas generales ("¿qué es…?", "¿cuánto es…?") van directo a la IA local
     if (brainReady() && GasBrain.looksLikeQuestion(chosen.text)) return askBrain(chosen.text, true);
     if (runIntent(chosen.intent, matches)) return;
@@ -807,6 +808,7 @@
   var searchId = 0;
 
   function runSearch(posPromise, talk) {
+    $('fuel-bar').hidden = false;
     if (!state.fuel) { showMessage('Elige un combustible.'); return; }
     var id = ++searchId;
     var started = Date.now();
@@ -1023,8 +1025,8 @@
     $('radius').value = state.radiusKm ? String(state.radiusKm) : '';
     if ($('radius').value !== String(state.radiusKm || '')) {
       var opt = document.createElement('option');
-      opt.value = opt.textContent = String(state.radiusKm);
-      opt.textContent += ' km';
+      opt.value = String(state.radiusKm);
+      opt.textContent = '↔ ' + state.radiusKm + ' km';
       $('radius').appendChild(opt);
       $('radius').value = String(state.radiusKm);
     }
@@ -1071,6 +1073,7 @@
       var action = wake.running ? A.wakeStop() : A.wakeStart({ reason: 'manual' });
       action.then(refreshWake).catch(function (err) { toast(err.message || String(err)); });
     });
+    $('wake-box').addEventListener('toggle', refreshWake);
     refreshWake();
   }
 
@@ -1097,9 +1100,36 @@
     } else if (warn) {
       warn.remove();
     }
+    renderWakeDiag(st);
     $('wake-now').textContent = st.running ? 'Detener' : 'Activar ahora';
     $('wake-now').classList.toggle('stop', !!st.running);
     if (st.car && $('wake-devices').hidden) loadBluetooth();
+  }
+
+  // Nivel del micrófono y lo último que oyó: sirve para saber si Android lo está silenciando
+  var wakeDiagTimer = null;
+
+  function renderWakeDiag(st) {
+    var box = $('wake-diag');
+    box.hidden = !st.running;
+    clearTimeout(wakeDiagTimer);
+    if (!st.running) return;
+    var pct = Math.min(100, Math.round(Math.sqrt((st.level || 0) / 32767) * 100));
+    box.querySelector('.meter span').style.width = pct + '%';
+    var p = $('wake-diag-text');
+    var heard = st.lastHeard && st.lastHeardAgoMs >= 0
+      ? 'Oyó «' + st.lastHeard.replace('[unk]', '…') + '» hace ' + Math.round(st.lastHeardAgoMs / 1000) + ' s'
+      : 'Aún no oye nada: habla cerca del celular';
+    if (st.muted) {
+      p.className = 'bad';
+      p.textContent = '⚠️ Android silenció el micrófono. Toca la notificación «Hola Oso» para reactivarlo.';
+    } else {
+      p.className = '';
+      p.textContent = 'Micrófono ' + (pct > 3 ? 'recibiendo sonido' : 'en silencio') + ' · ' + heard +
+        (st.state && st.state !== 'escuchando' ? ' · ' + st.state : '');
+    }
+    // refrescar cada segundo mientras la sección esté abierta y la app a la vista
+    if ($('wake-box').open && !document.hidden) wakeDiagTimer = setTimeout(refreshWake, 1000);
   }
 
   function saveWake() {
@@ -1142,6 +1172,32 @@
       $('wake-car').checked = false;
       toast(err.message || String(err));
     });
+  }
+
+  // ------------------------------------------------------------ ejemplos que van cambiando
+
+  var EXAMPLES = [
+    '“Llama a mamá”', '“Prende la linterna”', '“Llévame a Plaza San Miguel”', '“Alarma a las 6 y media”',
+    '“WhatsApp a Juan diciendo ya llegué”', '“Farmacias cerca”', '“Gasohol 95 en Primax o Repsol”',
+    '“¿Cuánto es el 18 % de 250?”', '“Temporizador de 10 minutos”'
+  ];
+
+  function rotateExamples() {
+    var i = 0;
+    setInterval(function () {
+      if (document.hidden) return;
+      i = (i + 1) % EXAMPLES.length;
+      var el = $('example');
+      el.classList.add('out');
+      setTimeout(function () {
+        el.textContent = EXAMPLES[i];
+        el.classList.remove('out');
+        var input = $('typed-text');
+        if (document.activeElement !== input) {
+          input.placeholder = 'o escribe: ' + EXAMPLES[(i + 3) % EXAMPLES.length].replace(/[“”]/g, '').toLowerCase();
+        }
+      }, 350);
+    }, 3500);
   }
 
   // ------------------------------------------------------------ tema claro / oscuro
@@ -1241,6 +1297,7 @@
 
     $('refresh').addEventListener('click', refreshNow);
     applyTheme(recall('theme') || 'auto');
+    rotateExamples();
     initWake();
     initBrain();
     $('theme').addEventListener('click', nextTheme);

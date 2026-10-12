@@ -42,61 +42,45 @@
       <button id="mic" class="mic" aria-label="Hablar">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg>
       </button>
-      <p id="hint" class="hint">Toca y di, por ejemplo:</p>
-      <ul class="examples">
-        <li>📞 “Llama a mamá”</li>
-        <li>🧭 “Llévame a Plaza San Miguel”</li>
-        <li>🔦 “Prende la linterna”</li>
-        <li>⏰ “Alarma a las 6 y media”</li>
-        <li>💬 “WhatsApp a Juan diciendo ya llegué”</li>
-        <li>📍 “Farmacias cerca”</li>
-        <li>⛽ “Gasohol 95 en Primax o Repsol”</li>
-        <li>🧠 “¿Cuánto es el 18 % de 250?”</li>
-      </ul>
+      <p class="hint">Toca y di <span id="example" class="example">“Llama a mamá”</span></p>
       <p id="heard" class="heard" hidden></p>
     </section>
 
     <form id="typed" class="typed">
-      <input id="typed-text" type="text" placeholder="…o escríbelo aquí" autocomplete="off">
+      <input id="typed-text" type="text" placeholder="o escribe: prende la linterna" autocomplete="off">
       <button type="submit">Ir</button>
     </form>
+
+    <!-- filtros de gasolina: barra compacta que solo aparece con resultados de grifos -->
+    <div id="fuel-bar" class="fuel-bar" hidden>
+      <select id="fuel" class="pill" aria-label="Combustible">
+        <option value="">⛽ Combustible</option>
+        <option value="regular">⛽ Regular 90</option>
+        <option value="premium">⛽ Premium 95/97</option>
+        <option value="g84">⛽ Gasolina 84</option>
+        <option value="diesel">⛽ Diésel</option>
+        <option value="glp">⛽ GLP</option>
+        <option value="gnv">⛽ GNV</option>
+      </select>
+      <div id="brands" class="brand-row" aria-label="Marcas"></div>
+      <span class="sep" aria-hidden="true"></span>
+      <select id="sort" class="pill" aria-label="Orden">
+        <option value="price">💲 Más barato</option>
+        <option value="distance">📍 Más cerca</option>
+      </select>
+      <select id="radius" class="pill" aria-label="Radio">
+        <option value="">↔ Auto</option>
+        <option value="2">↔ 2 km</option>
+        <option value="5">↔ 5 km</option>
+        <option value="10">↔ 10 km</option>
+        <option value="20">↔ 20 km</option>
+        <option value="50">↔ 50 km</option>
+      </select>
+    </div>
 
     <p id="summary" class="summary" hidden></p>
     <ol id="results" class="results"></ol>
 
-    <details class="filters">
-      <summary>⛽ Opciones de gasolina</summary>
-      <div class="row">
-        <label>Combustible
-          <select id="fuel">
-            <option value="">— elige —</option>
-            <option value="regular">Regular (90)</option>
-            <option value="premium">Premium (95/97)</option>
-            <option value="g84">Gasolina 84</option>
-            <option value="diesel">Diésel</option>
-            <option value="glp">GLP</option>
-            <option value="gnv">GNV</option>
-          </select>
-        </label>
-        <label>Radio
-          <select id="radius">
-            <option value="">Auto</option>
-            <option value="2">2 km</option>
-            <option value="5">5 km</option>
-            <option value="10">10 km</option>
-            <option value="20">20 km</option>
-            <option value="50">50 km</option>
-          </select>
-        </label>
-        <label>Orden
-          <select id="sort">
-            <option value="price">Más barato</option>
-            <option value="distance">Más cerca</option>
-          </select>
-        </label>
-      </div>
-      <div id="brands" class="chips" aria-label="Marcas"></div>
-    </details>
     <details class="filters brain" id="brain-box">
       <summary>🧠 IA local (sin internet)</summary>
       <p id="brain-status" class="wake-status">…</p>
@@ -111,6 +95,10 @@
     <details class="filters wake" id="wake-box">
       <summary>🐻 “Hola Oso” manos libres</summary>
       <p id="wake-status" class="wake-status">…</p>
+      <div id="wake-diag" class="wake-diag" hidden>
+        <div class="meter" aria-label="Nivel del micrófono"><span></span></div>
+        <p id="wake-diag-text"></p>
+      </div>
       <p class="wake-help">Di <strong>“Hola Oso”</strong>, espera el bip y di la orden. Funciona sin internet y con la pantalla bloqueada.</p>
       <label class="toggle"><input id="wake-charging" type="checkbox"> Activar mientras el celular carga</label>
       <label class="toggle"><input id="wake-car" type="checkbox"> Activar en el auto (Bluetooth)</label>

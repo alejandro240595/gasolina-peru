@@ -356,7 +356,16 @@ public class AssistantPlugin extends Plugin {
             .put("charging", WakeService.prefs(getContext()).getBoolean("charging", false))
             .put("car", WakeService.prefs(getContext()).getBoolean("car", false))
             .put("devices", devices)
-            .put("assistant", AssistService.instance != null);
+            .put("assistant", AssistService.instance != null)
+            // diagnóstico en vivo
+            .put("state", WakeService.state)
+            .put("level", WakeService.level)
+            .put("muted", WakeService.muted)
+            .put("lastHeard", WakeService.lastHeard)
+            .put("lastHeardAgoMs", WakeService.lastHeardAt == 0 ? -1
+                : android.os.SystemClock.elapsedRealtime() - WakeService.lastHeardAt)
+            .put("lastWakeAgoMs", WakeService.lastWakeAt == 0 ? -1
+                : android.os.SystemClock.elapsedRealtime() - WakeService.lastWakeAt);
     }
 
     @PluginMethod

@@ -1,7 +1,5 @@
 package pe.gasolina.voz;
 
-import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.bluetooth.BluetoothDevice;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -11,7 +9,6 @@ import android.os.BatteryManager;
 import android.os.Bundle;
 import android.service.voice.VoiceInteractionService;
 
-import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
 
 /**
@@ -94,19 +91,8 @@ public class AssistService extends VoiceInteractionService {
         try {
             WakeService.start(c, reason);
         } catch (Exception e) {
-            WakeService.ensureChannel(c);
-            int flags = PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT;
-            PendingIntent start = android.os.Build.VERSION.SDK_INT >= 26
-                ? PendingIntent.getForegroundService(c, 2, WakeService.startIntent(c, reason), flags)
-                : PendingIntent.getService(c, 2, WakeService.startIntent(c, reason), flags);
-            NotificationManager nm = c.getSystemService(NotificationManager.class);
-            nm.notify(WakeService.TAP_NOTIFICATION_ID, new NotificationCompat.Builder(c, "hola_oso")
-                .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-                .setContentTitle("Hola Oso")
-                .setContentText("Toca para activar la escucha " + ("car".equals(reason) ? "en el auto" : "mientras carga"))
-                .setContentIntent(start)
-                .setAutoCancel(true)
-                .build());
+            WakeService.postTapToStart(c, reason,
+                "Toca para activar la escucha " + ("car".equals(reason) ? "en el auto" : "mientras carga"));
         }
     }
 }

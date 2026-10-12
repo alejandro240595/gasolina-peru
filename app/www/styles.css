@@ -71,8 +71,6 @@ h1 { margin: 0; font-size: 22px; }
   100% { box-shadow: 0 0 0 28px rgb(11 92 255 / 0%); }
 }
 .hint { text-align: center; color: var(--muted); margin: 12px 0 4px; }
-.examples { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
-.examples li { font-size: 13px; background: var(--card); border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; }
 .heard.live { color: var(--accent); font-style: normal; font-weight: 600; }
 .hint strong { color: var(--text); }
 .heard { text-align: center; font-style: italic; margin: 8px 0 0; }
@@ -86,9 +84,6 @@ input, select, .typed button {
   border: 1px solid var(--border); border-radius: 10px; padding: 9px 10px;
 }
 .typed button { background: var(--accent); color: var(--accent-text); border: 0; font-weight: 600; }
-.row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
-.row label { display: flex; flex-direction: column; font-size: 12px; color: var(--muted); gap: 4px; }
-.row select { width: 100%; min-width: 0; text-overflow: ellipsis; }
 .station > * { min-width: 0; overflow-wrap: anywhere; }
 html, body { overflow-x: hidden; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
@@ -275,3 +270,32 @@ html, body { overflow-x: hidden; }
 .dots b:nth-child(2) { animation-delay: .15s; }
 .dots b:nth-child(3) { animation-delay: .3s; }
 @keyframes dot { 0%, 80%, 100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
+
+/* ---------- ejemplo rotativo ---------- */
+.hint { margin-top: 14px; }
+.example { display: inline-block; color: var(--text); font-weight: 600; transition: opacity .35s, transform .35s; }
+.example.out { opacity: 0; transform: translateY(6px); }
+
+/* ---------- barra de gasolina ---------- */
+.fuel-bar {
+  display: flex; align-items: center; gap: 6px; margin-top: 12px;
+  overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding-bottom: 2px;
+}
+.fuel-bar[hidden] { display: none; }
+.fuel-bar::-webkit-scrollbar { display: none; }
+.pill {
+  flex: none; -webkit-appearance: none; appearance: none; font: inherit; font-size: 13px; font-weight: 600;
+  color: var(--text); background: var(--card); border: 1px solid var(--border); border-radius: 999px;
+  padding: 6px 12px; max-width: none;
+}
+.fuel-bar .sep { flex: none; width: 1px; height: 20px; background: var(--border); margin: 0 2px; }
+.brand-row { display: flex; gap: 6px; flex: none; }
+.brand-row .chip { font-size: 13px; padding: 5px 11px; flex: none; }
+
+/* ---------- diagnóstico Hola Oso ---------- */
+.wake-diag { margin: 4px 0 6px; }
+.wake-diag[hidden] { display: none; }
+.wake-diag p { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
+.wake-diag p.bad { color: var(--warn); font-weight: 600; }
+.meter { height: 8px; border-radius: 8px; background: var(--border); overflow: hidden; }
+.meter span { display: block; height: 100%; width: 0; background: var(--good); transition: width .3s; }
