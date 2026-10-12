@@ -28,9 +28,29 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - name: Apuntar la app a los datos de este repositorio
+      # Versión = mayor.menor de package.json + número de ejecución (p. ej. 1.2.7).
+      # nativeLevel va como versionCode del APK; si sube, la app pide reinstalar el APK.
+      - name: Versión y configuración
         run: |
-          echo "window.GAS_CONFIG = { dataUrl: 'https://raw.githubusercontent.com/${{ github.repository }}/main/data/stations.json' };" > www/config.js
+          VERSION=$(node -p "require('./package.json').version.split('.').slice(0,2).join('.')").${{ github.run_number }}
+          NATIVE=$(node -p "require('./package.json').gasolina.nativeLevel")
+          REL=https://github.com/${{ github.repository }}/releases
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "NATIVE=$NATIVE" >> $GITHUB_ENV
+          cat > www/config.js <<EOF
+          window.GAS_CONFIG = {
+            version: '$VERSION',
+            dataUrl: 'https://raw.githubusercontent.com/${{ github.repository }}/main/data/stations.json',
+            updateUrl: '$REL/latest/download/version.json'
+          };
+          EOF
+          cat > ../version.json <<EOF
+          {"version": "$VERSION", "nativeLevel": $NATIVE,
+           "zip": "$REL/download/v$VERSION/www.zip",
+           "apk": "$REL/download/v$VERSION/gasolina-peru.apk"}
+          EOF
+          (cd www && zip -qr ../../www.zip .)
+          cat www/config.js ../version.json
 
       - run: npm install --no-audit --no-fund
 
@@ -38,6 +58,8 @@ jobs:
         run: |
           npx cap add android
           node scripts/patch-android.js
+          sed -i -E "s/versionCode [0-9]+/versionCode $NATIVE/; s/versionName \"[^\"]*\"/versionName \"$VERSION\"/" android/app/build.gradle
+          grep -E "versionCode|versionName" android/app/build.gradle
           npx cap sync android
 
       # Con la misma llave de firma, cada APK nuevo se instala encima del anterior.
@@ -66,8 +88,13 @@ jobs:
       - name: Publicar en Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: Gasolina Perú v1.0.${{ github.run_number }}
-          body: Descarga **gasolina-peru.apk** desde el celular e instálalo.
-          files: gasolina-peru.apk
+          tag_name: v${{ env.VERSION }}
+          name: Gasolina Perú v${{ env.VERSION }}
+          body: |
+            Primera instalación: descarga **gasolina-peru.apk** desde el celular e instálalo.
+            Si ya tienes la app, se actualiza sola (te aparecerá "Nueva versión lista → Reiniciar").
+          files: |
+            gasolina-peru.apk
+            www.zip
+            version.json
           make_latest: true

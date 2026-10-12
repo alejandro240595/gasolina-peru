@@ -22,6 +22,10 @@
       </button>
     </div>
   </header>
+  <div id="update" class="update" hidden>
+    <span id="update-text"></span>
+    <button id="update-btn" type="button"></button>
+  </div>
   <div id="toast" class="toast" role="status" hidden></div>
 
   <main>
@@ -73,11 +77,13 @@
 
     <p id="summary" class="summary" hidden></p>
     <ol id="results" class="results"></ol>
+    <p id="version" class="version"></p>
   </main>
 
   <script src="config.js"></script>
   <script src="vendor/fflate.min.js"></script>
   <script src="osinergmin.js"></script>
+  <script src="updater.js"></script>
   <script src="parser.js"></script>
   <script src="app.js"></script>
 </body>

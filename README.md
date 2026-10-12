@@ -60,6 +60,18 @@ El botón **Actualizar** descarga el Excel directo de Osinergmin desde el celula
 precios al momento, sin esperar a GitHub. Las ubicaciones y marcas siguen viniendo de GitHub, así que un
 grifo nuevo aparece recién cuando corre el workflow.
 
+## Actualizaciones de la app (sin reinstalar)
+
+Cada cambio en `app/` publica en *Releases*: el APK, `www.zip` (la interfaz) y `version.json`.
+Al abrir la app se revisa `version.json`:
+
+- **Cambió solo la interfaz** (HTML/JS/CSS): la app descarga `www.zip` en segundo plano y muestra
+  *"Nueva versión lista → Reiniciar"*. No hay que bajar el APK.
+- **Cambió la parte nativa** (plugins, permisos, `capacitor.config.json`): hay que subir
+  `gasolina.nativeLevel` en `app/package.json`; la app mostrará *"hay que reinstalar → Descargar"*.
+
+Si una versión nueva falla al arrancar, el plugin (`@capgo/capacitor-updater`) vuelve solo a la anterior.
+
 ## Frases que entiende
 
 | Dices | Entiende |

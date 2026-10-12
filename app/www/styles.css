@@ -172,3 +172,17 @@ html, body { overflow-x: hidden; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
+
+/* ---------- aviso de versión nueva ---------- */
+.update {
+  display: flex; align-items: center; gap: 10px; margin-top: 10px;
+  background: var(--accent); color: var(--accent-text); border-radius: 12px; padding: 10px 10px 10px 14px;
+  font-weight: 600; animation: appear .35s ease-out both;
+}
+.update[hidden] { display: none; }
+.update span { flex: 1; min-width: 0; }
+.update button {
+  font: inherit; font-weight: 700; border: 0; border-radius: 10px; padding: 8px 14px;
+  background: var(--accent-text); color: var(--accent);
+}
+.version { text-align: center; color: var(--muted); font-size: 12px; margin: 16px 0 0; }

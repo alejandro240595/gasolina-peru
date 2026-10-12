@@ -4,5 +4,14 @@
   "webDir": "www",
   "android": {
     "allowMixedContent": false
+  },
+  "plugins": {
+    "CapacitorUpdater": {
+      "autoUpdate": false,
+      "statsUrl": "",
+      "resetWhenUpdate": true,
+      "autoDeletePrevious": true,
+      "appReadyTimeout": 15000
+    }
   }
 }

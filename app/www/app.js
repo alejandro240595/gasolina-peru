@@ -543,6 +543,33 @@
     });
   }
 
+  // ------------------------------------------------------------ actualizaciones de la app
+
+  function showUpdate(text, button, action) {
+    $('update-text').textContent = text;
+    $('update-btn').textContent = button;
+    $('update-btn').onclick = action;
+    $('update').hidden = false;
+  }
+
+  function offerRestart(apply, manifest) {
+    showUpdate('Nueva versión ' + manifest.version + ' lista', 'Reiniciar', function () {
+      $('update-btn').disabled = true;
+      $('update-btn').textContent = 'Aplicando…';
+      apply().catch(function (err) {
+        $('update-btn').disabled = false;
+        toast('No se pudo aplicar: ' + (err.message || err));
+      });
+    });
+  }
+
+  function offerApk(manifest) {
+    showUpdate('Versión ' + manifest.version + ': hay que reinstalar la app', 'Descargar', function () {
+      if (Plugins.AppLauncher) Plugins.AppLauncher.openUrl({ url: manifest.apk });
+      else window.open(manifest.apk, '_blank');
+    });
+  }
+
   function init() {
     buildBrandChips();
     var prefs = recall('prefs');
@@ -564,6 +591,8 @@
     auto.addEventListener('change', function () { store('autolisten', auto.checked); });
 
     $('refresh').addEventListener('click', refreshNow);
+    $('version').textContent = 'Versión ' + (window.GAS_CONFIG.version || 'dev');
+    GasUpdater.check(offerApk, offerRestart);
     setInterval(showDataStatus, 60000);
 
     getPosition().catch(function () {});
