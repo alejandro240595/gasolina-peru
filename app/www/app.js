@@ -328,9 +328,13 @@
     showHeard(chosen.text);
     var intent = chosen.intent;
     if (intent.type === 'call') return handleCall(intent, matches);
+    if (intent.type === 'whatsapp') return handleWhatsApp(intent, matches);
+    if (intent.type === 'torch') return handleTorch(intent);
+    if (intent.type === 'alarm') return handleAlarm(intent.time);
+    if (intent.type === 'timer') return handleTimer(intent.seconds);
     if (intent.type === 'fuel') return handleFuel(intent.fuel);
     if (intent.type === 'place') return handlePlace(intent);
-    var msg = 'No entendí. Puedes decir: llama a mamá, llévame a Plaza San Miguel, o gasohol noventa y cinco en Primax.';
+    var msg = 'No entendí. Puedes decir: llama a mamá, prende la linterna, llévame a Plaza San Miguel, o gasohol noventa y cinco.';
     showMessage(msg);
     speak(msg);
   }
@@ -386,19 +390,24 @@
     if (intent.number) {
       return confirmCall({ name: intent.number.replace(/(\d{3})(?=\d)/g, '$1 '), number: intent.number });
     }
+    withContact(intent, matches, confirmCall, 'llamo');
+  }
+
+  // Busca el contacto (probando todas las alternativas del reconocedor del mismo tipo) y ejecuta
+  // action(contacto); si hay varios parecidos pregunta cuál.
+  function withContact(intent, matches, action, verb) {
     loadContacts()
       .then(function (list) {
-        // probar todas las alternativas que también sean "llamar a ..." y quedarse con la mejor
         var best = { results: GasIntents.findContacts(intent.name, list), name: intent.name };
         matches.forEach(function (m) {
           var c = GasIntents.classify(m);
-          if (c.type !== 'call' || !c.name || c.name === intent.name) return;
+          if (c.type !== intent.type || !c.name || c.name === intent.name) return;
           var r = GasIntents.findContacts(c.name, list);
           if (r.length && (!best.results.length || r[0].score > best.results[0].score)) best = { results: r, name: c.name };
         });
         var pick = GasIntents.pickContact(best.results);
-        if (pick.status === 'one') return confirmCall(pick.contact);
-        if (pick.status === 'ambiguous') return askWhich(pick.options);
+        if (pick.status === 'one') return action(pick.contact);
+        if (pick.status === 'ambiguous') return askWhich(pick.options, action, verb);
         var msg = 'No encontré a ' + best.name + ' en tus contactos.';
         showMessage(msg);
         speak(msg);
@@ -453,10 +462,10 @@
 
   var ORDINAL_WORDS = ['uno', 'dos', 'tres', 'cuatro'];
 
-  function askWhich(options) {
+  function askWhich(options, action, verb) {
     var ol = $('results');
     ol.innerHTML = '';
-    showMessage('¿A cuál llamo?');
+    showMessage('¿A cuál ' + verb + '?');
     options.forEach(function (o, i) {
       var li = document.createElement('li');
       li.className = 'option appear';
@@ -467,15 +476,17 @@
       li.querySelector('.tel').textContent = o.number;
       li.addEventListener('click', function () {
         if (Plugins.Assistant) Plugins.Assistant.cancelListening();
-        confirmCall(o);
+        answered = true;
+        action(o);
       });
       ol.appendChild(li);
     });
+    var answered = false;
     var question = 'Tengo ' + options.length + ' contactos: ' + options.map(function (o, i) {
       return ORDINAL_WORDS[i] + ', ' + o.name;
-    }).join('; ') + '. ¿A cuál llamo?';
+    }).join('; ') + '. ¿A cuál ' + verb + '?';
     speak(question).then(function () {
-      if (pendingCall) return null;   // ya eligió tocando la pantalla
+      if (answered) return null;   // ya eligió tocando la pantalla
       setListening(true);
       return listen();
     }).then(function (matches) {
@@ -483,10 +494,109 @@
       if (!matches || !matches.length) return;
       showHeard(matches[0]);
       var idx = GasIntents.pickOption(matches[0], options);
-      if (idx >= 0) confirmCall(options[idx]);
-      else if (idx === -1) { showMessage('Llamada cancelada'); speak('Cancelado'); ol.innerHTML = ''; }
+      if (idx >= 0) action(options[idx]);
+      else if (idx === -1) { showMessage('Cancelado'); speak('Cancelado'); ol.innerHTML = ''; }
       else speak('No entendí. Toca el contacto en la pantalla.');
     }).catch(function () { setListening(false); });
+  }
+
+  // ------------------------------------------------------------ WhatsApp
+
+  function handleWhatsApp(intent, matches) {
+    withContact(intent, matches, function (contact) { openWhatsApp(contact, intent.message); }, 'escribo');
+  }
+
+  // Número en formato internacional para wa.me (Perú: 9 dígitos que empiezan con 9 -> 51...)
+  function waNumber(number) {
+    var d = number.replace(/\D/g, '').replace(/^00/, '');
+    if (d.length === 9 && d[0] === '9') d = '51' + d;
+    return d;
+  }
+
+  function openWhatsApp(contact, message) {
+    var text = message ? message.charAt(0).toUpperCase() + message.slice(1) : '';
+    var url = 'https://wa.me/' + waNumber(contact.number) + (text ? '?text=' + encodeURIComponent(text) : '');
+    $('results').innerHTML = '';
+    showMessage('WhatsApp a ' + contact.name + (text ? ': “' + text + '”' : ''));
+    speak('Abriendo WhatsApp con ' + contact.name + (text ? '. Revisa el mensaje y envíalo.' : ''))
+      .then(function () { openUrl(url); });
+  }
+
+  // ------------------------------------------------------------ linterna, alarma, temporizador
+
+  function nativeOnly() {
+    if (Plugins.Assistant) return true;
+    showMessage('Esto solo funciona en el celular.');
+    return false;
+  }
+
+  function handleTorch(intent) {
+    if (!nativeOnly()) return;
+    Plugins.Assistant.torch(intent.on === null ? {} : { on: intent.on })
+      .then(function (r) {
+        $('results').innerHTML = '';
+        showMessage(r.on ? '🔦 Linterna encendida' : 'Linterna apagada');
+        speak(r.on ? 'Linterna encendida' : 'Linterna apagada');
+      })
+      .catch(function (err) { showMessage(err.message); speak(err.message); });
+  }
+
+  function spokenTime(t) {
+    var h12 = t.hour % 12 || 12;
+    var mins = t.minutes === 0 ? '' : t.minutes === 30 ? ' y media' : t.minutes === 15 ? ' y cuarto' : ' y ' + t.minutes;
+    var period = t.hour === 0 ? 'de la noche' : t.hour < 12 ? 'de la mañana' : t.hour < 19 ? 'de la tarde' : 'de la noche';
+    if (t.hour === 12 && t.minutes === 0) return 'las 12 del mediodía';
+    return (h12 === 1 ? 'la 1' : 'las ' + h12) + mins + ' ' + period;
+  }
+
+  function spokenDuration(sec) {
+    var h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60, parts = [];
+    if (h) parts.push(h === 1 ? 'una hora' : h + ' horas');
+    if (m) parts.push(m === 1 ? 'un minuto' : m + ' minutos');
+    if (s) parts.push(s + ' segundos');
+    return parts.join(' y ') || '0 segundos';
+  }
+
+  // Pregunta algo y vuelve a escuchar; parse(texto) debe devolver null si no entendió.
+  function askAgain(question, parse, done) {
+    showMessage(question);
+    speak(question).then(function () {
+      setListening(true);
+      return listen();
+    }).then(function (matches) {
+      setListening(false);
+      for (var i = 0; i < (matches || []).length; i++) {
+        var v = parse(GasParser.normalize(matches[i]));
+        if (v !== null) { showHeard(matches[i]); return done(v); }
+      }
+      if (matches && matches.length) { showMessage('No entendí.'); speak('No entendí.'); }
+    }).catch(function () { setListening(false); });
+  }
+
+  function handleAlarm(time) {
+    if (!nativeOnly()) return;
+    if (!time) return askAgain('¿A qué hora pongo la alarma?', GasIntents.parseTime, handleAlarm);
+    Plugins.Assistant.setAlarm({ hour: time.hour, minutes: time.minutes, label: 'Mi Asistente' })
+      .then(function () {
+        $('results').innerHTML = '';
+        var msg = 'Alarma para ' + spokenTime(time);
+        showMessage('⏰ ' + msg + ' (' + time.hour + ':' + ('0' + time.minutes).slice(-2) + ')');
+        speak(msg);
+      })
+      .catch(function (err) { showMessage(err.message); speak(err.message); });
+  }
+
+  function handleTimer(seconds) {
+    if (!nativeOnly()) return;
+    if (!seconds) return askAgain('¿De cuánto tiempo?', GasIntents.parseDuration, handleTimer);
+    Plugins.Assistant.setTimer({ seconds: seconds })
+      .then(function () {
+        $('results').innerHTML = '';
+        var msg = 'Temporizador de ' + spokenDuration(seconds);
+        showMessage('⏱️ ' + msg);
+        speak(msg);
+      })
+      .catch(function (err) { showMessage(err.message); speak(err.message); });
   }
 
   // ------------------------------------------------------------ búsqueda
@@ -792,6 +902,8 @@
     if (Plugins.Assistant) {
       // texto en vivo mientras hablas y el micrófono "late" con tu voz
       Plugins.Assistant.addListener('partial', function (e) { if (listening) showHeard(e.text, true); });
+      // abierta con la tecla lateral / botón de inicio / audífono: escuchar ya
+      Plugins.Assistant.addListener('assist', function () { if (!listening) listenAndHandle(); });
       Plugins.Assistant.addListener('level', function (e) {
         if (listening) $('mic').style.transform = 'scale(' + (1 + Math.max(0, Math.min(10, e.value)) / 40) + ')';
       });
@@ -806,7 +918,7 @@
 
     getPosition().catch(function () {});
     loadData().then(function () {
-      if (auto.checked && isNative) onMic();
+      if (auto.checked && isNative && !listening) listenAndHandle();
     });
   }
 

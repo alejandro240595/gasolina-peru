@@ -1,4 +1,5 @@
-// Decide qué quiere el usuario (llamar, ir a un lugar, buscar gasolina) y busca contactos.
+// Decide qué quiere el usuario (llamar, WhatsApp, linterna, alarma, ir a un lugar, gasolina)
+// y busca contactos.
 // Todo es local: no usa internet.
 (function (root) {
   'use strict';
@@ -13,6 +14,74 @@
   var SEARCH_RE = /^(?:(?:por favor|oye|ok)\s+)?(?:busca(?:me)?|buscar|muestrame|mostrar|encuentra|donde (?:queda|esta|hay|estan)|ubica(?:me)?|ver)\s+(?:el\s+|la\s+|los\s+|las\s+|un\s+|una\s+|unos\s+|unas\s+)?(.+)$/;
   var NEAR_RE = /^(.+?)\s+(?:cerca|cercan[oa]s?|por aqui|aqui cerca|cerca de (?:mi|aqui))$/;
   var FUEL_WORDS = /\b(gasolina|gasohol|combustible|grifo|grifos|gasolinera|gasolineras|diesel|petroleo|glp|gnv|premium|regular)\b/;
+  var TORCH_RE = /\b(linterna|flash|luz de la camara)\b/;
+  var WHATSAPP_RE = /^(?:(?:por favor|oye|ok)\s+)?(?:(?:manda(?:le|r)?|envia(?:le|r)?|escribe(?:le)?|abre)\s+(?:un\s+|el\s+)?)?(?:whatsapp|wasap|wassap|guasap|whatsap|mensaje|chat)\s+(?:a\s+|al\s+|para\s+|de\s+|con\s+)(.+?)(?:\s+(?:diciendo(?:le)?|que diga|que dice|dile|diciendole|con el texto|que)\s+(.+))?$/;
+  // orden inverso: "escríbele a Pedro un whatsapp diciendo ..."
+  var WHATSAPP2_RE = /^(?:(?:por favor|oye|ok)\s+)?(?:manda(?:le)?|envia(?:le)?|escribe(?:le)?)\s+(?:a\s+|al\s+)(.+?)\s+(?:un\s+)?(?:whatsapp|wasap|wassap|guasap|whatsap|mensaje)(?:\s+(?:diciendo(?:le)?|que diga|que dice|dile|diciendole|con el texto|que)\s+(.+))?$/;
+  var ALARM_RE = /\b(alarma|despiertame|despertador|levantame)\b/;
+  var TIMER_RE = /\b(temporizador|timer|cronometro|cuenta regresiva|avisame en)\b/;
+
+  var NUM_WORDS = {
+    cero: 0, un: 1, una: 1, uno: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8,
+    nueve: 9, diez: 10, once: 11, doce: 12, trece: 13, catorce: 14, quince: 15, veinte: 20,
+    veinticinco: 25, treinta: 30, cuarenta: 40, cuarentaicinco: 45, cincuenta: 50
+  };
+
+  function num(w) {
+    if (w === undefined || w === null) return null;
+    if (/^\d+$/.test(w)) return parseInt(w, 10);
+    return w in NUM_WORDS ? NUM_WORDS[w] : null;
+  }
+
+  // "a las 6", "6 y media", "6 30 de la tarde", "7 menos cuarto", "mediodia" -> {hour, minutes}
+  function parseTime(t) {
+    if (/\bmediodia\b/.test(t)) return { hour: 12, minutes: 0 };
+    if (/\bmedianoche\b/.test(t)) return { hour: 0, minutes: 0 };
+    // grupos: 1 hora · 2 "menos X" · 3 "y X" · 4 minutos "6 45" (de "6:45")
+    var tail = '(?:\\s+menos\\s+(cuarto|\\d{1,2}|[a-z]+)|\\s+(?:y|con)\\s+(media|cuarto|\\d{1,2}|[a-z]+)|\\s+(\\d{2})\\b)?';
+    var patterns = [
+      new RegExp('\\b(?:a las|a la|para las|las|la)\\s+(\\d{1,2}|[a-z]+)' + tail, 'g'),
+      new RegExp('\\b(\\d{1,2})\\b' + tail, 'g')
+    ];
+    var m = null;
+    for (var p = 0; p < patterns.length && !m; p++) {
+      var x;
+      while ((x = patterns[p].exec(t))) {   // "la alarma a las 6": saltar coincidencias que no son hora
+        if (num(x[1]) !== null && num(x[1]) <= 23) { m = x; break; }
+      }
+    }
+    if (!m) return null;
+    var hour = num(m[1]);
+    var minutes = 0;
+    var word = m[3] || m[4];
+    if (word) minutes = word === 'media' ? 30 : word === 'cuarto' ? 15 : (num(word) || 0);
+    if (m[2]) {
+      var less = m[2] === 'cuarto' ? 15 : (num(m[2]) || 0);
+      hour = (hour + 23) % 24;
+      minutes = 60 - less;
+    }
+    if (minutes > 59) minutes = 0;
+    if (/\b(tarde|noche|pm|p m)\b/.test(t) && hour < 12) hour += 12;
+    if (/\b(manana|madrugada|noche|am|a m)\b/.test(t) && hour === 12) hour = 0;
+    return { hour: hour, minutes: minutes };
+  }
+
+  // "10 minutos", "una hora y media", "30 segundos" -> segundos
+  function parseDuration(t) {
+    var total = 0, found = false, m;
+    var re = /(\d+|[a-z]+)\s+(hora|horas|minuto|minutos|segundo|segundos)\b/g;
+    while ((m = re.exec(t))) {
+      var n = num(m[1]);
+      if (n === null) continue;
+      found = true;
+      total += n * (m[2].indexOf('hora') === 0 ? 3600 : m[2].indexOf('minuto') === 0 ? 60 : 1);
+    }
+    if (/\bmedia hora\b/.test(t)) { total += 1800; found = true; }
+    if (/\b(hora|horas|minuto|minutos)\s+y\s+media\b/.test(t)) {
+      total += /\bhoras?\s+y\s+media/.test(t) ? 1800 : 30;
+    }
+    return found ? total : null;
+  }
 
   function cleanTarget(t) {
     return t.replace(/\b(por favor|ahora|ahorita|ya|rapido|porfa)\b/g, ' ')
@@ -23,6 +92,19 @@
   function classify(text) {
     var t = normalize(text);
     var m;
+    if (TORCH_RE.test(t)) {
+      var on = /\b(prende|prender|prendela|enciende|encender|enciendela|activa|activar|pon|abre)\b/.test(t) ? true
+             : /\b(apaga|apagar|apagala|desactiva|desactivar|quita|cierra)\b/.test(t) ? false : null;
+      return { type: 'torch', on: on, text: t };
+    }
+    if ((m = WHATSAPP_RE.exec(t) || WHATSAPP2_RE.exec(t))) {
+      // el mensaje se toma del texto original para conservar tildes y signos
+      var original = m[2] && /\s(?:diciendo(?:le)?|diciéndole|que diga|que dice|dile|con el texto|que)\s+([\s\S]+)$/i.exec(String(text));
+      var message = original ? original[1].trim() : (m[2] || '').trim();
+      return { type: 'whatsapp', name: cleanTarget(m[1]), message: message, text: t };
+    }
+    if (TIMER_RE.test(t)) return { type: 'timer', seconds: parseDuration(t), text: t };
+    if (ALARM_RE.test(t)) return { type: 'alarm', time: parseTime(t), text: t };
     if ((m = CALL_RE.exec(t))) {
       var target = cleanTarget(m[1]);
       var digits = target.replace(/\D/g, '');
@@ -167,7 +249,8 @@
     return best;
   }
 
-  var api = { classify: classify, findContacts: findContacts, pickContact: pickContact, pickOption: pickOption };
+  var api = { classify: classify, findContacts: findContacts, pickContact: pickContact, pickOption: pickOption,
+              parseTime: parseTime, parseDuration: parseDuration };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.GasIntents = api;
 })(this);

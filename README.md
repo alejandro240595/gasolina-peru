@@ -8,6 +8,24 @@ Asistente de voz Android **local** (no depende de internet para entender ni para
 | “Llévame a Plaza San Miguel”, “cómo llego a …” | Abre la ruta en Google Maps |
 | “Farmacias cerca”, “dónde queda …”, “busca …” | Abre la búsqueda en Google Maps |
 | “Gasohol 95 en Primax o Repsol” | Grifos cercanos más baratos (precios Osinergmin) |
+| “Prende / apaga la linterna” | Linterna (sin internet) |
+| “Alarma a las 6 y media”, “despiértame a las 5” | Crea la alarma en el Reloj |
+| “Temporizador de 10 minutos” | Inicia el temporizador |
+| “WhatsApp a Juan diciendo ya llegué” | Abre el chat con el mensaje escrito (tú tocas *Enviar*) |
+
+### Usarla en lugar de Gemini (Samsung S24 Ultra)
+
+La app se registra como **asistente digital** (`AssistService`, `AssistSessionService`,
+`AssistRecognitionService` en `app/native/`).
+
+1. *Ajustes → Aplicaciones → Elegir aplicaciones predeterminadas → Aplicación de asistente digital →
+   Asistente digital de dispositivo* → **Mi Asistente**.
+2. *Ajustes → Funciones avanzadas → Tecla lateral → Mantener presionado* → **Asistente digital**.
+3. Listo: mantén presionada la tecla lateral (o el botón de inicio, o el del audífono Bluetooth) y la app
+   abre escuchando, incluso con la pantalla bloqueada.
+
+“Hey Google” no se puede reemplazar: Android reserva la palabra de activación a apps del sistema.
+Para volver a Gemini, repite el paso 1 y elige Google.
 
 La voz se reconoce **en el teléfono** (Android 12+) con el plugin nativo `app/native/AssistantPlugin.java`.
 Si tu teléfono no tiene el español sin conexión, ve a *Ajustes → Google → Voz (o Asistente) →

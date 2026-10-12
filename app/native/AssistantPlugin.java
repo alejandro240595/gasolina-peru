@@ -2,14 +2,25 @@ package pe.gasolina.voz;
 
 import android.Manifest;
 import android.content.ActivityNotFoundException;
+import android.content.ComponentName;
 import android.content.ContentResolver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.database.Cursor;
+import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.provider.AlarmClock;
 import android.provider.ContactsContract;
 import android.speech.RecognitionListener;
+import android.speech.RecognitionService;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 
@@ -24,12 +35,15 @@ import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
 
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Funciones locales del asistente (sin internet):
  *  - listen(): reconocimiento de voz en el dispositivo cuando está disponible (Android 12+)
  *  - getContacts(): nombres y números de la agenda
  *  - call(): llamada directa
+ *  - torch(), setAlarm(), setTimer(): linterna, alarma y temporizador
+ *  - evento "assist": la app se abrió como asistente del sistema (tecla lateral, audífono)
  */
 @CapacitorPlugin(
     name = "Assistant",
@@ -41,8 +55,57 @@ import java.util.ArrayList;
 )
 public class AssistantPlugin extends Plugin {
 
+    public static final String ACTION_ASSIST_LAUNCH = "pe.gasolina.voz.ASSIST";
+
     private SpeechRecognizer recognizer;
     private PluginCall listenCall;
+    private String flashId;
+    private boolean torchOn;
+
+    @Override
+    public void load() {
+        if (isAssist(getActivity().getIntent())) {
+            notifyListeners("assist", new JSObject(), true);
+        }
+        try {
+            CameraManager cm = (CameraManager) getContext().getSystemService(Context.CAMERA_SERVICE);
+            flashId = findFlash(cm);
+            if (flashId != null) {
+                cm.registerTorchCallback(new CameraManager.TorchCallback() {
+                    @Override public void onTorchModeChanged(String cameraId, boolean enabled) {
+                        if (cameraId.equals(flashId)) torchOn = enabled;
+                    }
+                }, new Handler(Looper.getMainLooper()));
+            }
+        } catch (Exception ignored) { }
+    }
+
+    @Override
+    protected void handleOnNewIntent(Intent intent) {
+        super.handleOnNewIntent(intent);
+        if (isAssist(intent)) notifyListeners("assist", new JSObject(), true);
+    }
+
+    public static boolean isAssist(Intent intent) {
+        if (intent == null || intent.getAction() == null) return false;
+        String a = intent.getAction();
+        return ACTION_ASSIST_LAUNCH.equals(a) || Intent.ACTION_ASSIST.equals(a)
+            || Intent.ACTION_VOICE_COMMAND.equals(a) || "android.intent.action.VOICE_ASSIST".equals(a);
+    }
+
+    /** Un servicio de reconocimiento de voz que no sea esta app (de preferencia el de Google). */
+    public static ComponentName findOtherRecognizer(Context ctx) {
+        List<ResolveInfo> services = ctx.getPackageManager()
+            .queryIntentServices(new Intent(RecognitionService.SERVICE_INTERFACE), PackageManager.GET_META_DATA);
+        ComponentName fallback = null;
+        for (ResolveInfo ri : services) {
+            if (ri.serviceInfo == null || ctx.getPackageName().equals(ri.serviceInfo.packageName)) continue;
+            ComponentName c = new ComponentName(ri.serviceInfo.packageName, ri.serviceInfo.name);
+            if (ri.serviceInfo.packageName.startsWith("com.google.")) return c;
+            if (fallback == null) fallback = c;
+        }
+        return fallback;
+    }
 
     // ------------------------------------------------------------------ voz
 
@@ -75,13 +138,18 @@ public class AssistantPlugin extends Plugin {
             }
             boolean onDevice = wantOnDevice && Build.VERSION.SDK_INT >= 31
                 && SpeechRecognizer.isOnDeviceRecognitionAvailable(getContext());
-            if (!onDevice && !SpeechRecognizer.isRecognitionAvailable(getContext())) {
+            // Si esta app es el asistente predeterminado, el reconocedor "por defecto" del sistema es
+            // el nuestro (AssistRecognitionService); se usa directamente el de Google.
+            ComponentName other = onDevice ? null : findOtherRecognizer(getContext());
+            if (!onDevice && other == null && !SpeechRecognizer.isRecognitionAvailable(getContext())) {
                 call.reject("Este teléfono no tiene reconocimiento de voz", "unavailable");
                 return;
             }
             recognizer = onDevice
                 ? SpeechRecognizer.createOnDeviceSpeechRecognizer(getContext())
-                : SpeechRecognizer.createSpeechRecognizer(getContext());
+                : other != null
+                    ? SpeechRecognizer.createSpeechRecognizer(getContext(), other)
+                    : SpeechRecognizer.createSpeechRecognizer(getContext());
             listenCall = call;
             final boolean usedOnDevice = onDevice;
 
@@ -251,6 +319,68 @@ public class AssistantPlugin extends Plugin {
             case ContactsContract.CommonDataKinds.Phone.TYPE_WORK:
             case ContactsContract.CommonDataKinds.Phone.TYPE_WORK_MOBILE: return "work";
             default: return "other";
+        }
+    }
+
+    // ------------------------------------------------------------------ linterna, alarma, temporizador
+
+    private static String findFlash(CameraManager cm) throws CameraAccessException {
+        for (String id : cm.getCameraIdList()) {
+            CameraCharacteristics ch = cm.getCameraCharacteristics(id);
+            Boolean flash = ch.get(CameraCharacteristics.FLASH_INFO_AVAILABLE);
+            Integer facing = ch.get(CameraCharacteristics.LENS_FACING);
+            if (Boolean.TRUE.equals(flash) && facing != null && facing == CameraCharacteristics.LENS_FACING_BACK) {
+                return id;
+            }
+        }
+        return null;
+    }
+
+    @PluginMethod
+    public void torch(PluginCall call) {
+        CameraManager cm = (CameraManager) getContext().getSystemService(Context.CAMERA_SERVICE);
+        try {
+            if (flashId == null) flashId = findFlash(cm);
+            if (flashId == null) {
+                call.reject("Este teléfono no tiene linterna");
+                return;
+            }
+            Boolean on = call.getBoolean("on");
+            boolean target = on != null ? on : !torchOn;
+            cm.setTorchMode(flashId, target);
+            torchOn = target;
+            call.resolve(new JSObject().put("on", target));
+        } catch (CameraAccessException e) {
+            call.reject("No se pudo usar la linterna (la cámara está en uso)");
+        }
+    }
+
+    @PluginMethod
+    public void setAlarm(PluginCall call) {
+        Intent intent = new Intent(AlarmClock.ACTION_SET_ALARM);
+        intent.putExtra(AlarmClock.EXTRA_HOUR, call.getInt("hour", 7));
+        intent.putExtra(AlarmClock.EXTRA_MINUTES, call.getInt("minutes", 0));
+        String label = call.getString("label");
+        if (label != null) intent.putExtra(AlarmClock.EXTRA_MESSAGE, label);
+        intent.putExtra(AlarmClock.EXTRA_SKIP_UI, true);
+        startClock(call, intent);
+    }
+
+    @PluginMethod
+    public void setTimer(PluginCall call) {
+        Intent intent = new Intent(AlarmClock.ACTION_SET_TIMER);
+        intent.putExtra(AlarmClock.EXTRA_LENGTH, call.getInt("seconds", 60));
+        intent.putExtra(AlarmClock.EXTRA_SKIP_UI, true);
+        startClock(call, intent);
+    }
+
+    private void startClock(PluginCall call, Intent intent) {
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            getContext().startActivity(intent);
+            call.resolve();
+        } catch (ActivityNotFoundException e) {
+            call.reject("No hay app de reloj para esto");
         }
     }
 
