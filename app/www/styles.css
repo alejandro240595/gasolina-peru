@@ -189,7 +189,7 @@ html, body { overflow-x: hidden; }
   font: inherit; font-weight: 700; border: 0; border-radius: 10px; padding: 8px 14px;
   background: var(--accent-text); color: var(--accent);
 }
-.version { text-align: center; color: var(--muted); font-size: 12px; margin: 16px 0 0; }
+.version { text-align: center; color: var(--muted); font-size: 12px; margin: 16px 0 0; text-decoration: underline; cursor: pointer; }
 
 /* ---------- llamadas ---------- */
 .callcard {

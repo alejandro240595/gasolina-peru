@@ -5,6 +5,8 @@
   'use strict';
 
   var Plugins = (root.Capacitor && root.Capacitor.Plugins) || {};
+  var running = null;          // revisión en curso (evita dos descargas a la vez)
+  var downloaded = {};         // versión -> bundle ya descargado en esta sesión
 
   function fetchManifest(url) {
     return Plugins.CapacitorHttp.request({ method: 'GET', url: url + '?t=' + Date.now(), responseType: 'text',
@@ -23,27 +25,36 @@
     return false;
   }
 
-  // onNative(manifest): hace falta APK nuevo · onReady(apply, manifest): interfaz nueva descargada
-  function check(onNative, onReady) {
+  // handlers.onNative(manifest): hace falta APK nuevo
+  // handlers.onReady(apply, manifest): interfaz nueva descargada
+  // Devuelve una promesa con el resultado: 'native' | 'ready' | 'current' | 'unavailable'
+  function check(handlers) {
     var cfg = root.GAS_CONFIG || {};
     var Updater = Plugins.CapacitorUpdater;
-    if (!Updater || !Plugins.CapacitorHttp || !cfg.updateUrl) return Promise.resolve();
+    if (!Updater || !Plugins.CapacitorHttp || !cfg.updateUrl) return Promise.resolve('unavailable');
+    if (running) return running;
     // Confirma que esta versión arrancó bien; si no se llama, el plugin vuelve a la anterior.
     Updater.notifyAppReady().catch(function () {});
 
     var nativeLevel = Plugins.App ? Plugins.App.getInfo().then(function (i) { return Number(i.build) || 0; })
                                   : Promise.resolve(0);
-    return Promise.all([fetchManifest(cfg.updateUrl), nativeLevel])
+    running = Promise.all([fetchManifest(cfg.updateUrl), nativeLevel])
       .then(function (r) {
         var manifest = r[0], installedNative = r[1];
-        if (manifest.nativeLevel > installedNative) { onNative(manifest); return; }
-        if (!newer(manifest.version, cfg.version)) return;
-        return Updater.download({ url: manifest.zip, version: manifest.version })
-          .then(function (bundle) {
-            onReady(function () { return Updater.set({ id: bundle.id }); }, manifest);
-          });
+        if (manifest.nativeLevel > installedNative) { handlers.onNative(manifest); return 'native'; }
+        if (!newer(manifest.version, cfg.version)) return 'current';
+        var ready = downloaded[manifest.version]
+          ? Promise.resolve(downloaded[manifest.version])
+          : Updater.download({ url: manifest.zip, version: manifest.version, checksum: manifest.checksum || '' });
+        return ready.then(function (bundle) {
+          downloaded[manifest.version] = bundle;
+          handlers.onReady(function () { return Updater.set({ id: bundle.id }); }, manifest);
+          return 'ready';
+        });
       })
-      .catch(function (err) { console.warn('Sin actualización:', err && err.message); });
+      .then(function (result) { running = null; return result; },
+            function (err) { running = null; throw err; });
+    return running;
   }
 
   root.GasUpdater = { check: check, newer: newer };

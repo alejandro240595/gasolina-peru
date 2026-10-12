@@ -20,7 +20,7 @@
     "@capacitor/cli": "^7.0.0"
   },
   "gasolina": {
-    "nativeLevel": 4,
+    "nativeLevel": 5,
     "//": "Subir nativeLevel cuando cambien plugins, permisos o capacitor.config: obliga a instalar APK nuevo"
   }
 }

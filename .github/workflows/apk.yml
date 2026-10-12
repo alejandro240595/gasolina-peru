@@ -44,12 +44,14 @@ jobs:
             updateUrl: '$REL/latest/download/version.json'
           };
           EOF
+          (cd www && zip -qr ../../www.zip .)
+          # el plugin de actualización exige el SHA-256 del zip
+          CHECKSUM=$(sha256sum ../www.zip | cut -d' ' -f1)
           cat > ../version.json <<EOF
-          {"version": "$VERSION", "nativeLevel": $NATIVE,
+          {"version": "$VERSION", "nativeLevel": $NATIVE, "checksum": "$CHECKSUM",
            "zip": "$REL/download/v$VERSION/www.zip",
            "apk": "$REL/download/v$VERSION/gasolina-peru.apk"}
           EOF
-          (cd www && zip -qr ../../www.zip .)
           cat www/config.js ../version.json
 
       - run: npm install --no-audit --no-fund

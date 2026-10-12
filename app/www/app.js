@@ -891,6 +891,25 @@
     });
   }
 
+  var lastUpdateCheck = 0;
+
+  // manual = true: el usuario tocó "buscar actualización" -> siempre dar una respuesta
+  function checkUpdates(manual) {
+    lastUpdateCheck = Date.now();
+    if (manual) toast('Buscando actualización…');
+    GasUpdater.check({ onNative: offerApk, onReady: offerRestart })
+      .then(function (result) {
+        if (!manual) return;
+        if (result === 'current') toast('Ya tienes la última versión');
+        else if (result === 'unavailable') toast('Las actualizaciones solo funcionan en el celular');
+      })
+      .catch(function (err) {
+        var msg = 'No se pudo actualizar: ' + (err && err.message || err);
+        $('version').textContent = 'Versión ' + (window.GAS_CONFIG.version || 'dev') + ' · ' + msg + ' (toca para reintentar)';
+        if (manual) toast(msg);
+      });
+  }
+
   function offerApk(manifest) {
     showUpdate('Versión ' + manifest.version + ': hay que reinstalar la app', 'Descargar', function () {
       if (Plugins.AppLauncher) Plugins.AppLauncher.openUrl({ url: manifest.apk });
@@ -937,8 +956,15 @@
         if (p.contacts === 'granted') loadContacts().catch(function () {});
       }).catch(function () {});
     }
-    $('version').textContent = 'Versión ' + (window.GAS_CONFIG.version || 'dev');
-    GasUpdater.check(offerApk, offerRestart);
+    $('version').textContent = 'Versión ' + (window.GAS_CONFIG.version || 'dev') + ' · buscar actualización';
+    $('version').addEventListener('click', function () { checkUpdates(true); });
+    checkUpdates(false);
+    if (Plugins.App) {
+      // al volver a la app (no solo al abrirla desde cero), revisar como máximo cada 10 minutos
+      Plugins.App.addListener('resume', function () {
+        if (Date.now() - lastUpdateCheck > 10 * 60000) checkUpdates(false);
+      });
+    }
     setInterval(showDataStatus, 60000);
 
     getPosition().catch(function () {});
