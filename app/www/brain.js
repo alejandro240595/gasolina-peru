@@ -10,11 +10,14 @@
   var MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre',
                 'octubre', 'noviembre', 'diciembre'];
 
+  function today(now) {
+    return 'Hoy es ' + DAYS[now.getDay()] + ' ' + now.getDate() + ' de ' + MONTHS[now.getMonth()] + ' de ' +
+      now.getFullYear() + ', son las ' + now.getHours() + ':' + ('0' + now.getMinutes()).slice(-2) + '.';
+  }
+
   function systemPrompt(now) {
-    var hh = now.getHours(), mm = ('0' + now.getMinutes()).slice(-2);
     return [
-      'Eres "Oso", el asistente de voz de un celular en Perú. Hoy es ' + DAYS[now.getDay()] + ' ' + now.getDate() +
-        ' de ' + MONTHS[now.getMonth()] + ' de ' + now.getFullYear() + ', son las ' + hh + ':' + mm + '.',
+      'Eres "Oso", el asistente de voz de un celular en Perú. ' + today(now),
       'Contesta SIEMPRE en una sola línea con una de estas dos formas:',
       '1) Si pide hacer algo en el celular: ACCION seguido de un JSON. Tipos posibles:',
       '{"tipo":"llamar","contacto":"nombre"}',
@@ -37,8 +40,7 @@
     ['despiértame mañana tempranito a las cinco y media', 'ACCION {"tipo":"alarma","hora":5,"minutos":30}'],
     ['comunícame con el doctor Ramírez', 'ACCION {"tipo":"llamar","contacto":"doctor Ramírez"}'],
     ['tengo hambre, hay alguna pollería por aquí', 'ACCION {"tipo":"buscar_lugar","consulta":"pollerías"}'],
-    ['cuánto es el 15 por ciento de 230', 'RESPUESTA El 15 por ciento de 230 es 34,5.'],
-    ['qué me recomiendas para el dolor de cabeza', 'RESPUESTA Descansa, toma agua y evita pantallas; si es fuerte o no pasa, consulta a un médico.']
+    ['cuánto es el 15 por ciento de 230', 'RESPUESTA El 15 por ciento de 230 es 34,5.']
   ];
 
   function turn(role, text) { return '<|im_start|>' + role + '\n' + text + '<|im_end|>\n'; }
@@ -49,6 +51,28 @@
     EXAMPLES.forEach(function (e) { p += turn('user', e[0]) + turn('assistant', e[1]); });
     (history || []).slice(-3).forEach(function (h) { p += turn('user', h.user) + turn('assistant', h.assistant); });
     return p + turn('user', text) + '<|im_start|>assistant\n';
+  }
+
+  // Preguntas: instrucciones mínimas (sin lista de acciones ni ejemplos) -> mucho menos que procesar.
+  // El modelo contesta texto directo, sin "RESPUESTA".
+  function buildQuestionPrompt(text, history, now) {
+    var p = turn('system', 'Eres "Oso", asistente de voz de un celular en Perú. ' + today(now || new Date()) +
+      ' Responde en español, corto (máximo 2 frases), sin emojis ni listas. Si no sabes algo con seguridad, dilo; no tienes internet.');
+    (history || []).slice(-2).forEach(function (h) {
+      p += turn('user', h.user) + turn('assistant', h.assistant.replace(/^RESPUESTA\s*/, ''));
+    });
+    return p + turn('user', text) + '<|im_start|>assistant\n';
+  }
+
+  // Corta el texto que va llegando en oraciones completas para ir leyéndolas en voz alta.
+  // Devuelve {ready: [oraciones completas], rest: lo que falta}
+  function takeSentences(buffer) {
+    var ready = [], m, re = /^[\s\S]*?[.!?…](?=\s|$)/;
+    while ((m = re.exec(buffer)) && m[0].trim().length >= 12) {
+      ready.push(m[0].trim());
+      buffer = buffer.slice(m[0].length);
+    }
+    return { ready: ready, rest: buffer };
   }
 
   // ------------------------------------------------------------ interpretar la respuesta
@@ -121,6 +145,7 @@
   // Texto que se muestra mientras el modelo escribe (oculta el prefijo y el JSON)
   function streamingView(partial) {
     var s = String(partial || '');
+    if (s.trim().length < 5) return null;             // aún no se sabe si es acción o respuesta
     if (/^\s*(ACCI|ACTI|\{)/i.test(s)) return null;   // es una acción: no mostrar el JSON
     return s.replace(/^\s*(RESPUESTA|ANSWER)?\s*:?\s*/i, '');
   }
@@ -132,8 +157,9 @@
     return QUESTION_RE.test(P.normalize(text));
   }
 
-  var api = { buildPrompt: buildPrompt, parseReply: parseReply, toIntent: toIntent,
-              streamingView: streamingView, looksLikeQuestion: looksLikeQuestion };
+  var api = { buildPrompt: buildPrompt, buildQuestionPrompt: buildQuestionPrompt, parseReply: parseReply,
+              toIntent: toIntent, streamingView: streamingView, looksLikeQuestion: looksLikeQuestion,
+              takeSentences: takeSentences };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.GasBrain = api;
 })(this);

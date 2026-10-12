@@ -327,7 +327,7 @@
     });
     showHeard(chosen.text);
     // preguntas generales ("¿qué es…?", "¿cuánto es…?") van directo a la IA local
-    if (brainReady() && GasBrain.looksLikeQuestion(chosen.text)) return askBrain(chosen.text);
+    if (brainReady() && GasBrain.looksLikeQuestion(chosen.text)) return askBrain(chosen.text, true);
     if (runIntent(chosen.intent, matches)) return;
     if (brainReady()) return askBrain(chosen.text);
     var msg = 'No entendí. Puedes decir: llama a mamá, prende la linterna, llévame a Plaza San Miguel, o gasohol noventa y cinco.';
@@ -368,7 +368,8 @@
     place: function (i) { return (i.mode === 'navigate' ? 'ir a ' : 'buscar ') + i.query; }
   };
 
-  function askBrain(text) {
+  // question = true: es una pregunta -> prompt corto y respuesta en texto directo
+  function askBrain(text, question) {
     if (brainBusy) Plugins.Brain.cancel();
     brainBusy = true;
     var ol = $('results');
@@ -381,18 +382,34 @@
     ol.appendChild(li);
     var view = li.querySelector('.answer-text');
     var partial = '';
+    var started = Date.now(), firstToken = 0;
+    var spoken = '', pendingSpeech = '';   // voz en paralelo: leer cada oración apenas se completa
     var listener = Plugins.Brain.addListener('token', function (e) {
+      if (!firstToken) firstToken = Date.now();
       partial += e.text;
       var shown = GasBrain.streamingView(partial);
-      if (shown) { li.classList.remove('thinking'); view.textContent = shown.replace(/<\|im_end\|>[\s\S]*$/, ''); }
+      if (shown === null) return;
+      shown = shown.replace(/<\|im_end\|>[\s\S]*$/, '');
+      li.classList.remove('thinking');
+      view.textContent = shown;
+
+      var cut = GasBrain.takeSentences(shown.slice(spoken.length));
+      cut.ready.forEach(function (sentence) { speakQueued(sentence); });
+      spoken = shown.length - cut.rest.length > spoken.length ? shown.slice(0, shown.length - cut.rest.length) : spoken;
+      pendingSpeech = cut.rest;
     });
-    var started = Date.now();
-    Plugins.Brain.generate({ prompt: GasBrain.buildPrompt(text, brainHistory), temperature: 0.2 })
+    var prompt = question ? GasBrain.buildQuestionPrompt(text, brainHistory) : GasBrain.buildPrompt(text, brainHistory);
+    Plugins.Brain.generate({ prompt: prompt, temperature: 0.2 })
       .then(function (r) {
-        var reply = GasBrain.parseReply(r.text);
-        var secs = ((Date.now() - started) / 1000).toFixed(1).replace('.', ',');
+        var reply = question && !/^\s*(ACCI|ACTI|\{)/i.test(r.text)
+          ? { kind: r.text ? 'answer' : 'none', text: r.text.replace(/^\s*(RESPUESTA|ANSWER)\s*:?\s*/i, '').trim() }
+          : GasBrain.parseReply(r.text);
+        var end = Date.now();
+        var think = (((firstToken || end) - started) / 1000).toFixed(1).replace('.', ',');
+        var write = ((end - (firstToken || end)) / 1000).toFixed(1).replace('.', ',');
         li.classList.remove('thinking');
-        li.querySelector('.answer-head span').textContent = 'IA local · ' + secs + ' s';
+        li.querySelector('.answer-head span').textContent = 'IA local · ' + (r.backend || '') +
+          ' · pensó ' + think + ' s · escribió ' + write + ' s';
         if (reply.kind === 'action') {
           var label = (INTENT_LABELS[reply.intent.type] || function () { return 'acción'; })(reply.intent);
           view.textContent = 'Entendí: ' + label;
@@ -402,7 +419,10 @@
         } else if (reply.kind === 'answer') {
           view.textContent = reply.text;
           remember(text, 'RESPUESTA ' + reply.text);
-          speak(reply.text);
+          // leer lo que falte (lo ya leído durante la escritura no se repite)
+          var remaining = spoken && reply.text.indexOf(spoken.trim()) === 0
+            ? reply.text.slice(spoken.trim().length).trim() : (spoken ? '' : reply.text);
+          if (remaining) speakQueued(remaining);
         } else {
           view.textContent = 'No entendí. Intenta decirlo de otra forma.';
           speak('No entendí. Intenta decirlo de otra forma.');
@@ -417,6 +437,28 @@
         Promise.resolve(listener).then(function (h) { if (h && h.remove) h.remove(); });
         refreshBrain();
       });
+  }
+
+  // Cola de voz: cada oración se lee al terminar la anterior (sin cortar la que está sonando)
+  var speechQueue = Promise.resolve();
+
+  function speakQueued(text) {
+    speechQueue = speechQueue.then(function () {
+      if (Plugins.TextToSpeech) {
+        return Plugins.TextToSpeech.speak({ text: text, lang: 'es-PE', rate: 1.0, category: 'playback' })
+          .catch(function () { return Plugins.TextToSpeech.speak({ text: text, lang: 'es-ES', rate: 1.0 }); })
+          .catch(function () {});
+      }
+      if (window.speechSynthesis) {
+        return new Promise(function (resolve) {
+          var u = new SpeechSynthesisUtterance(text);
+          u.lang = 'es-PE';
+          u.onend = u.onerror = resolve;
+          speechSynthesis.speak(u);
+        });
+      }
+    });
+    return speechQueue;
   }
 
   function remember(user, assistant) {
