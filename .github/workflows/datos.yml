@@ -43,5 +43,5 @@ jobs:
             echo "Sin cambios"
           else
             git commit -m "Precios actualizados $(date -u +%Y-%m-%d\ %H:%M)"
-            git push
+            git pull --rebase --quiet && git push
           fi
