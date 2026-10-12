@@ -2,8 +2,9 @@ name: Actualizar precios
 
 on:
   schedule:
-    - cron: "0 12 * * *"   # 7:00 hora de Perú
-    - cron: "0 22 * * *"   # 17:00 hora de Perú
+    # cada 3 horas de 6:00 a 21:00 hora de Perú (UTC-5)
+    - cron: "0 11,14,17,20,23 * * *"
+    - cron: "0 2 * * *"
   workflow_dispatch:
 
 permissions:

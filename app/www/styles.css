@@ -138,11 +138,35 @@ html, body { overflow-x: hidden; }
 .station.appear { animation: appear .35s ease-out both; }
 @keyframes appear { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 
-#data-status.refreshing::before {
-  content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 6px; vertical-align: -1px;
-  border: 2px solid var(--accent); border-right-color: transparent; border-radius: 50%;
-  animation: spin .8s linear infinite;
+/* ---------- estado de los precios ---------- */
+.status {
+  display: flex; align-items: center; gap: 10px; margin-top: 10px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 8px 8px 8px 12px;
 }
+.status .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+.status.fresh .dot { background: var(--good); box-shadow: 0 0 0 4px rgb(10 138 74 / 18%); }
+.status.aging .dot { background: var(--warn); }
+.status.old .dot { background: #d6453d; }
+.status.busy .dot { background: var(--accent); animation: blink 1s ease-in-out infinite; }
+.status-body { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.status-text { font-weight: 700; font-size: 15px; }
+.status-detail { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.refresh {
+  display: flex; align-items: center; gap: 6px; flex: none;
+  font: inherit; font-size: 14px; font-weight: 600; border: 1px solid var(--border); border-radius: 10px;
+  padding: 8px 10px; background: var(--bg); color: var(--accent);
+}
+.refresh svg { width: 18px; height: 18px; fill: currentColor; }
+.refresh:disabled { opacity: .6; }
+.status.busy .refresh svg { animation: spin .9s linear infinite; }
+
+.toast {
+  position: fixed; left: 16px; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 10;
+  background: var(--text); color: var(--bg); border-radius: 12px; padding: 12px 14px;
+  font-weight: 600; text-align: center; box-shadow: 0 8px 24px rgb(0 0 0 / 25%);
+}
+.toast.show { animation: toast-in .25s ease-out both; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 @media (prefers-reduced-motion: reduce) {

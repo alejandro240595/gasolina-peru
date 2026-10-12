@@ -28,40 +28,141 @@
 
   // ------------------------------------------------------------ datos
 
-  function loadData() {
+  // Hay dos fuentes de precios:
+  //  - data/stations.json en GitHub (ubicaciones + marcas + precios; se regenera cada 3 horas)
+  //  - el Excel de Osinergmin descargado desde el celular con "Actualizar ahora" (solo precios)
+  // Se usan los precios de la que sea más reciente.
+
+  function loadData(force) {
     if (!data) {
       var cached = recall('stations');
       if (cached && cached.data) {
         data = cached.data;
         dataSavedAt = cached.savedAt;
+        applyLivePrices();
         showDataStatus();
       }
     }
-    if (data && Date.now() - dataSavedAt < DATA_MAX_AGE_MS) return Promise.resolve();
-    $('data-status').classList.add('refreshing');
+    if (!force && data && Date.now() - dataSavedAt < DATA_MAX_AGE_MS) return Promise.resolve();
+    setStatusBusy(true, data ? null : 'Descargando precios…');
     return fetch(window.GAS_CONFIG.dataUrl, { cache: 'no-cache' })
       .then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
       })
       .then(function (json) {
-        data = json;
         dataSavedAt = Date.now();
         store('stations', { savedAt: dataSavedAt, data: json });
-        showDataStatus();
+        data = json;
+        applyLivePrices();
       })
       .catch(function (err) {
-        if (!data) $('data-status').textContent = 'No se pudieron cargar los precios (' + err.message + ').';
+        if (!data) throw new Error('No se pudieron cargar los precios (' + err.message + ').');
       })
-      .then(function () { $('data-status').classList.remove('refreshing'); });
+      .then(function () { setStatusBusy(false); showDataStatus(); },
+            function (err) { setStatusBusy(false); $('status-text').textContent = err.message; });
+  }
+
+  function time(value) { var t = Date.parse(value || ''); return isNaN(t) ? 0 : t; }
+
+  // Si los precios descargados directo de Osinergmin son más nuevos que los de GitHub, se aplican.
+  function applyLivePrices() {
+    var live = recall('live');
+    data.meta.liveModified = null;
+    if (!live || time(live.modified) <= time(data.meta.source_modified)) return 0;
+    var changed = 0;
+    data.stations.forEach(function (s) {
+      var fresh = live.prices[s.id];
+      if (!fresh) return;
+      Object.keys(fresh).forEach(function (k) {
+        if (!s.f[k] || s.f[k][0] !== fresh[k][0]) changed++;
+      });
+      s.f = fresh;
+    });
+    data.meta.liveModified = live.modified;
+    return changed;
+  }
+
+  function pricesTime() {
+    return time(data.meta.liveModified) || time(data.meta.source_modified) || time(data.meta.generated);
+  }
+
+  function ago(ms) {
+    var min = Math.max(0, Math.round((Date.now() - ms) / 60000));
+    if (min < 1) return 'hace un momento';
+    if (min < 60) return 'hace ' + min + ' min';
+    var h = Math.floor(min / 60);
+    if (h < 24) return 'hace ' + h + ' h' + (min % 60 && h < 6 ? ' ' + (min % 60) + ' min' : '');
+    var d = Math.floor(h / 24);
+    return 'hace ' + d + (d === 1 ? ' día' : ' días');
   }
 
   function showDataStatus() {
-    var m = data.meta;
-    var when = m.source_modified ? new Date(m.source_modified) : new Date(m.generated);
-    $('data-status').textContent = m.count.toLocaleString('es-PE') + ' grifos · precios Osinergmin del ' +
-      when.toLocaleDateString('es-PE', { day: 'numeric', month: 'short' }) + ' ' +
-      when.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+    if (!data) return;
+    var when = pricesTime();
+    var age = Date.now() - when;
+    $('status').className = 'status ' + (age < 4 * 3600e3 ? 'fresh' : age < 24 * 3600e3 ? 'aging' : 'old');
+    $('status-text').textContent = 'Precios ' + ago(when);
+    $('status-detail').textContent = new Date(when).toLocaleString('es-PE',
+      { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) +
+      ' · ' + (data.meta.liveModified ? 'directo de Osinergmin' : 'vía GitHub');
+  }
+
+  function setStatusBusy(busy, text) {
+    $('status').classList.toggle('busy', busy);
+    $('refresh').disabled = busy;
+    if (text) $('status-text').textContent = text;
+  }
+
+  function toast(text) {
+    var el = $('toast');
+    el.textContent = text;
+    el.hidden = false;
+    el.classList.remove('show');
+    void el.offsetWidth;   // reinicia la animación
+    el.classList.add('show');
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(function () { el.hidden = true; }, 4000);
+  }
+
+  // "Actualizar ahora": baja el Excel de Osinergmin en el celular y actualiza los precios al momento.
+  function refreshNow() {
+    if (!Plugins.CapacitorHttp) {   // navegador de escritorio: solo se puede recargar desde GitHub
+      return loadData(true).then(function () { toast('Precios recargados desde GitHub'); });
+    }
+    var before = 0;
+    return loadData(false)
+      .then(function () {
+        if (data) before = pricesTime();
+        setStatusBusy(true, 'Descargando de Osinergmin…');
+        return GasOsinergmin.download(Plugins.CapacitorHttp);
+      })
+      .then(function (file) {
+        setStatusBusy(true, 'Procesando precios…');
+        return new Promise(function (resolve) { setTimeout(resolve, 30); })   // deja pintar el texto
+          .then(function () { return { parsed: GasOsinergmin.parseXlsx(file.bytes, window.fflate), file: file }; });
+      })
+      .then(function (r) {
+        if (!data) throw new Error('faltan las ubicaciones de GitHub; revisa tu conexión');
+        var modified = r.file.modified || new Date().toUTCString();
+        if (time(modified) <= before) {
+          setStatusBusy(false);
+          showDataStatus();
+          toast('Ya tienes los precios más recientes de Osinergmin');
+          return;
+        }
+        store('live', { modified: modified, fetchedAt: Date.now(), prices: r.parsed.prices });
+        var changed = applyLivePrices();
+        setStatusBusy(false);
+        showDataStatus();
+        toast('✓ Precios actualizados' + (changed ? ' · ' + changed + ' cambios' : ''));
+        if (state.fuel && $('results').children.length) runSearch(position, false);
+      })
+      .catch(function (err) {
+        setStatusBusy(false);
+        showDataStatus();
+        toast('No se pudo actualizar: ' + (err.message || err));
+      });
   }
 
   // ------------------------------------------------------------ ubicación
@@ -461,6 +562,9 @@
     var auto = $('autolisten');
     auto.checked = !!recall('autolisten');
     auto.addEventListener('change', function () { store('autolisten', auto.checked); });
+
+    $('refresh').addEventListener('click', refreshNow);
+    setInterval(showDataStatus, 60000);
 
     getPosition().catch(function () {});
     loadData().then(function () {

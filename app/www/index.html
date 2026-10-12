@@ -10,8 +10,19 @@
 <body>
   <header class="top">
     <h1>Gasolina Perú</h1>
-    <p id="data-status" class="muted">Cargando precios…</p>
+    <div id="status" class="status">
+      <span class="dot" aria-hidden="true"></span>
+      <div class="status-body">
+        <span id="status-text" class="status-text">Cargando precios…</span>
+        <span id="status-detail" class="status-detail"></span>
+      </div>
+      <button id="refresh" class="refresh" type="button" aria-label="Actualizar precios ahora">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.95 7.95 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+        <span>Actualizar</span>
+      </button>
+    </div>
   </header>
+  <div id="toast" class="toast" role="status" hidden></div>
 
   <main>
     <section class="voice">
@@ -65,6 +76,8 @@
   </main>
 
   <script src="config.js"></script>
+  <script src="vendor/fflate.min.js"></script>
+  <script src="osinergmin.js"></script>
   <script src="parser.js"></script>
   <script src="app.js"></script>
 </body>

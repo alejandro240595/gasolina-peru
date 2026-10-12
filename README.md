@@ -10,7 +10,7 @@ que se actualiza a diario.
 ## Cómo funciona
 
 ```
-Osinergmin (Excel) ──► GitHub Actions (2 veces al día) ──► data/stations.json ──► App en tu celular
+Osinergmin (Excel) ──► GitHub Actions (cada 3 h) ──► data/stations.json ──► App en tu celular
                         · agrupa por grifo                                         · GPS + voz
                         · Google Places → ubicación exacta                         · filtra y ordena
                         · marca (razón social / Google / OSM)                      · lo lee en voz alta
@@ -20,7 +20,7 @@ Osinergmin (Excel) ──► GitHub Actions (2 veces al día) ──► data/sta
 |---|---|
 | `pipeline/` | Script Python que genera `data/stations.json`; `pipeline/cache/` guarda las ubicaciones ya encontradas |
 | `app/` | App Capacitor (HTML/JS) → APK Android |
-| `.github/workflows/` | `datos.yml` actualiza los precios · `apk.yml` compila el APK y lo publica en *Releases* |
+| `.github/workflows/` | `datos.yml` actualiza los precios cada 3 horas (6:00–21:00 Perú) · `apk.yml` compila el APK y lo publica en *Releases* |
 
 ## Puesta en marcha
 
@@ -52,6 +52,13 @@ Para activar Google:
 El script respeta un tope de **4.800 consultas/mes** (`GOOGLE_MONTHLY_LIMIT`) y **1.000 por ejecución**
 (`GOOGLE_MAX_PER_RUN`). Con ~5.700 grifos, la primera ubicación completa toma unos 5 días del primer mes
 y el resto el mes siguiente; después solo se consultan grifos nuevos o con dirección cambiada.
+
+## Estado y actualización manual
+
+Arriba en la app se ve cuándo son los precios (punto verde: menos de 4 h; ámbar: menos de 24 h; rojo: más).
+El botón **Actualizar** descarga el Excel directo de Osinergmin desde el celular (~1,5 MB) y aplica los
+precios al momento, sin esperar a GitHub. Las ubicaciones y marcas siguen viniendo de GitHub, así que un
+grifo nuevo aparece recién cuando corre el workflow.
 
 ## Frases que entiende
 
