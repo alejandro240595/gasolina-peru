@@ -1,0 +1,73 @@
+name: Compilar APK
+
+on:
+  push:
+    branches: [main]
+    paths: ["app/**", ".github/workflows/apk.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Apuntar la app a los datos de este repositorio
+        run: |
+          echo "window.GAS_CONFIG = { dataUrl: 'https://raw.githubusercontent.com/${{ github.repository }}/main/data/stations.json' };" > www/config.js
+
+      - run: npm install --no-audit --no-fund
+
+      - name: Crear proyecto Android
+        run: |
+          npx cap add android
+          node scripts/patch-android.js
+          npx cap sync android
+
+      # Con la misma llave de firma, cada APK nuevo se instala encima del anterior.
+      - name: Llave de firma fija
+        env:
+          DEBUG_KEYSTORE_B64: ${{ secrets.DEBUG_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$DEBUG_KEYSTORE_B64" ]; then
+            mkdir -p ~/.android
+            echo "$DEBUG_KEYSTORE_B64" | base64 -d > ~/.android/debug.keystore
+            echo "Usando llave de firma del secreto DEBUG_KEYSTORE_B64"
+          fi
+
+      - name: Compilar
+        working-directory: app/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+          cp app/build/outputs/apk/debug/app-debug.apk ../../gasolina-peru.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gasolina-peru-apk
+          path: gasolina-peru.apk
+
+      - name: Publicar en Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Gasolina Perú v1.0.${{ github.run_number }}
+          body: Descarga **gasolina-peru.apk** desde el celular e instálalo.
+          files: gasolina-peru.apk
+          make_latest: true

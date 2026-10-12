@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b5cff">
+  <title>Gasolina Perú</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="top">
+    <h1>Gasolina Perú</h1>
+    <p id="data-status" class="muted">Cargando precios…</p>
+  </header>
+
+  <main>
+    <section class="voice">
+      <button id="mic" class="mic" aria-label="Hablar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg>
+      </button>
+      <p id="hint" class="hint">Toca y di, por ejemplo:<br><strong>“Gasohol 95 en Primax o Repsol”</strong></p>
+      <p id="heard" class="heard" hidden></p>
+    </section>
+
+    <section class="filters">
+      <form id="typed" class="typed">
+        <input id="typed-text" type="text" placeholder="…o escríbelo aquí" autocomplete="off">
+        <button type="submit">Buscar</button>
+      </form>
+      <div class="row">
+        <label>Combustible
+          <select id="fuel">
+            <option value="">— elige —</option>
+            <option value="regular">Regular (90)</option>
+            <option value="premium">Premium (95/97)</option>
+            <option value="g84">Gasolina 84</option>
+            <option value="diesel">Diésel</option>
+            <option value="glp">GLP</option>
+            <option value="gnv">GNV</option>
+          </select>
+        </label>
+        <label>Radio
+          <select id="radius">
+            <option value="">Auto</option>
+            <option value="2">2 km</option>
+            <option value="5">5 km</option>
+            <option value="10">10 km</option>
+            <option value="20">20 km</option>
+            <option value="50">50 km</option>
+          </select>
+        </label>
+        <label>Orden
+          <select id="sort">
+            <option value="price">Más barato</option>
+            <option value="distance">Más cerca</option>
+          </select>
+        </label>
+      </div>
+      <div id="brands" class="chips" aria-label="Marcas"></div>
+      <label class="toggle"><input id="autolisten" type="checkbox"> Escuchar al abrir la app</label>
+    </section>
+
+    <p id="summary" class="summary" hidden></p>
+    <ol id="results" class="results"></ol>
+  </main>
+
+  <script src="config.js"></script>
+  <script src="parser.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

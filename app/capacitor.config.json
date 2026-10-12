@@ -1,0 +1,8 @@
+{
+  "appId": "pe.gasolina.voz",
+  "appName": "Gasolina Perú",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false
+  }
+}
