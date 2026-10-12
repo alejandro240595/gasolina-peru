@@ -1,7 +1,17 @@
-# Gasolina Perú 🎙️⛽
+# Mi Asistente 🎙️ (antes Gasolina Perú)
 
-App Android que, con tu voz y tu GPS, te dice qué grifos cercanos tienen el combustible
-que buscas al mejor precio. Por ejemplo: *“Gasohol 95 en Primax o Repsol”*.
+Asistente de voz Android **local** (no depende de internet para entender ni para llamar):
+
+| Dices | Hace |
+|---|---|
+| “Llama a mamá”, “llama al 987 654 321” | Busca el contacto (tolera errores de pronunciación), cuenta 3 s con botón *Cancelar* y llama directo. Si hay varios parecidos, pregunta cuál. |
+| “Llévame a Plaza San Miguel”, “cómo llego a …” | Abre la ruta en Google Maps |
+| “Farmacias cerca”, “dónde queda …”, “busca …” | Abre la búsqueda en Google Maps |
+| “Gasohol 95 en Primax o Repsol” | Grifos cercanos más baratos (precios Osinergmin) |
+
+La voz se reconoce **en el teléfono** (Android 12+) con el plugin nativo `app/native/AssistantPlugin.java`.
+Si tu teléfono no tiene el español sin conexión, ve a *Ajustes → Google → Voz (o Asistente) →
+Reconocimiento de voz sin conexión* y descarga **Español (Estados Unidos)**.
 
 Los precios vienen del archivo oficial de Osinergmin
 [`Ultimos-Precios-Registrados-EVPC.xlsx`](https://www.osinergmin.gob.pe/empresas/hidrocarburos/scop/documentos-scop),

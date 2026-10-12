@@ -1,6 +1,6 @@
 {
   "appId": "pe.gasolina.voz",
-  "appName": "Gasolina Perú",
+  "appName": "Mi Asistente",
   "webDir": "www",
   "android": {
     "allowMixedContent": false

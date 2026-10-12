@@ -40,7 +40,7 @@ h1 { margin: 0; font-size: 22px; }
   background: var(--accent); color: var(--accent-text);
   display: grid; place-items: center; cursor: pointer;
   box-shadow: 0 8px 24px rgb(11 92 255 / 35%);
-  transition: transform .15s;
+  transition: transform .08s linear;
 }
 .mic svg { width: 52px; height: 52px; fill: currentColor; }
 .mic:active { transform: scale(.95); }
@@ -49,12 +49,16 @@ h1 { margin: 0; font-size: 22px; }
   0% { box-shadow: 0 0 0 0 rgb(11 92 255 / 50%); }
   100% { box-shadow: 0 0 0 28px rgb(11 92 255 / 0%); }
 }
-.hint { text-align: center; color: var(--muted); margin: 12px 0 0; }
+.hint { text-align: center; color: var(--muted); margin: 12px 0 4px; }
+.examples { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.examples li { font-size: 13px; background: var(--card); border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; }
+.heard.live { color: var(--accent); font-style: normal; font-weight: 600; }
 .hint strong { color: var(--text); }
 .heard { text-align: center; font-style: italic; margin: 8px 0 0; }
 
-.filters { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 12px; margin-top: 12px; }
-.typed { display: flex; gap: 8px; }
+.filters { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 12px; margin-top: 16px; }
+.filters summary { font-weight: 600; cursor: pointer; }
+.typed { display: flex; gap: 8px; margin-top: 12px; }
 .typed input { flex: 1; min-width: 0; }
 input, select, .typed button {
   font: inherit; color: var(--text); background: var(--bg);
@@ -186,3 +190,30 @@ html, body { overflow-x: hidden; }
   background: var(--accent-text); color: var(--accent);
 }
 .version { text-align: center; color: var(--muted); font-size: 12px; margin: 16px 0 0; }
+
+/* ---------- llamadas ---------- */
+.callcard {
+  background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 18px;
+  display: flex; flex-direction: column; gap: 8px; text-align: center;
+}
+.call-name { font-size: 24px; font-weight: 800; }
+.call-number { color: var(--muted); font-size: 16px; letter-spacing: .5px; }
+.countdown { height: 6px; border-radius: 6px; background: var(--border); overflow: hidden; margin: 6px 0; }
+.countdown span { display: block; height: 100%; background: var(--good); transform-origin: left;
+  animation: countdown linear forwards; }
+@keyframes countdown { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.callcard.done .countdown span { animation: none; transform: none; }
+.call-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.call-actions[hidden] { display: none; }
+.call-actions button { font: inherit; font-weight: 700; border: 0; border-radius: 12px; padding: 12px; }
+.call-actions .cancel { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+.call-actions .now { background: var(--good); color: #fff; }
+.option {
+  display: grid; grid-template-columns: 36px 1fr; gap: 2px 12px; align-items: center; cursor: pointer;
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 12px;
+}
+.option .num { grid-row: span 2; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--accent); color: var(--accent-text); font-weight: 800; }
+.option .who { font-weight: 700; }
+.option .tel { color: var(--muted); font-size: 14px; }
+.option, .callcard { animation: appear .35s ease-out both; }
