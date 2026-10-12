@@ -326,7 +326,6 @@
       if (!chosen || (chosen.intent.type === 'unknown' && c.type !== 'unknown')) chosen = { text: m, intent: c };
     });
     showHeard(chosen.text);
-    $('fuel-bar').hidden = true;   // runSearch la vuelve a mostrar si la orden es de gasolina
     // preguntas generales ("¿qué es…?", "¿cuánto es…?") van directo a la IA local
     if (brainReady() && GasBrain.looksLikeQuestion(chosen.text)) return askBrain(chosen.text, true);
     if (runIntent(chosen.intent, matches)) return;
@@ -808,7 +807,6 @@
   var searchId = 0;
 
   function runSearch(posPromise, talk) {
-    $('fuel-bar').hidden = false;
     if (!state.fuel) { showMessage('Elige un combustible.'); return; }
     var id = ++searchId;
     var started = Date.now();
